@@ -95,8 +95,8 @@ async def _write_agg_trade(conn: aiosqlite.Connection, env: Envelope) -> None:
     await conn.execute(
         "INSERT OR IGNORE INTO agg_trades "
         "(exchange, product, symbol, agg_trade_id, first_trade_id, last_trade_id, "
-        "price, quantity, trade_time, buyer_maker, taker_side, observed_at) "
-        "VALUES ('binance', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "price, quantity, trade_time, event_time, buyer_maker, taker_side, observed_at) "
+        "VALUES ('binance', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             env.product,
             env.symbol,
@@ -106,6 +106,7 @@ async def _write_agg_trade(conn: aiosqlite.Connection, env: Envelope) -> None:
             p["price"],
             p["quantity"],
             p["trade_time"],
+            p.get("event_time"),
             int(buyer_maker),
             taker_side(buyer_maker),
             env.observed_at,
@@ -138,9 +139,9 @@ async def _write_ticker_24h(conn: aiosqlite.Connection, env: Envelope) -> None:
         "INSERT INTO ticker_24h "
         "(exchange, product, symbol, price_change, price_change_percent, "
         "weighted_avg_price, last_price, open_price, high_price, low_price, "
-        "base_volume, quote_volume, open_time, close_time, first_trade_id, "
+        "base_volume, quote_volume, open_time, close_time, event_time, first_trade_id, "
         "last_trade_id, trade_count, observed_at) "
-        "VALUES ('binance', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "VALUES ('binance', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             env.product,
             env.symbol,
@@ -155,6 +156,7 @@ async def _write_ticker_24h(conn: aiosqlite.Connection, env: Envelope) -> None:
             p.get("quote_volume"),
             p.get("open_time"),
             p.get("close_time"),
+            p.get("event_time"),
             p.get("first_trade_id"),
             p.get("last_trade_id"),
             p.get("trade_count"),
@@ -196,14 +198,16 @@ async def _write_depth_snapshot(conn: aiosqlite.Connection, env: Envelope) -> No
     p = env.payload
     await conn.execute(
         "INSERT INTO depth_snapshots "
-        "(exchange, product, symbol, last_update_id, bids_json, asks_json, observed_at) "
-        "VALUES ('binance', ?, ?, ?, ?, ?, ?)",
+        "(exchange, product, symbol, last_update_id, bids_json, asks_json, "
+        "event_time, transaction_time, observed_at) VALUES ('binance', ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             env.product,
             env.symbol,
             p["last_update_id"],
             json.dumps(p["bids"], separators=(",", ":")),
             json.dumps(p["asks"], separators=(",", ":")),
+            p.get("event_time"),
+            p.get("transaction_time"),
             env.observed_at,
         ),
     )
@@ -274,9 +278,36 @@ async def _write_funding_rate(conn: aiosqlite.Connection, env: Envelope) -> None
 async def _write_open_interest(conn: aiosqlite.Connection, env: Envelope) -> None:
     p = env.payload
     await conn.execute(
-        "INSERT INTO open_interest (exchange, product, symbol, open_interest, observed_at) "
-        "VALUES ('binance', ?, ?, ?, ?)",
-        (env.product, env.symbol, p["open_interest"], env.observed_at),
+        "INSERT INTO open_interest (exchange, product, symbol, open_interest, "
+        "observation_time, observed_at) VALUES ('binance', ?, ?, ?, ?, ?)",
+        (env.product, env.symbol, p["open_interest"], p.get("observation_time"), env.observed_at),
+    )
+
+
+async def _write_futures_positioning(conn: aiosqlite.Connection, env: Envelope) -> None:
+    p = env.payload
+    await conn.execute(
+        "INSERT INTO futures_positioning (exchange, product, symbol, metric, value, "
+        "observation_time, source_endpoint, observed_at, payload_json) "
+        "VALUES ('binance', ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            env.product,
+            env.symbol,
+            p["metric"],
+            p["value"],
+            p.get("observation_time"),
+            env.source_endpoint,
+            env.observed_at,
+            json.dumps(p.get("raw", {}), separators=(",", ":")),
+        ),
+    )
+
+
+async def _write_symbol_coverage(conn: aiosqlite.Connection, env: Envelope) -> None:
+    p = env.payload
+    await conn.execute(
+        "INSERT INTO symbol_coverage (product, symbol, tier, observed_at) VALUES (?, ?, ?, ?)",
+        (env.product, env.symbol, p["tier"], env.observed_at),
     )
 
 
@@ -305,8 +336,8 @@ async def _write_mark_price(conn: aiosqlite.Connection, env: Envelope) -> None:
     p = env.payload
     await conn.execute(
         "INSERT INTO mark_price (exchange, product, symbol, mark_price, index_price, "
-        "estimated_settle_price, funding_rate, next_funding_time, observed_at) "
-        "VALUES ('binance', ?, ?, ?, ?, ?, ?, ?, ?)",
+        "estimated_settle_price, funding_rate, next_funding_time, event_time, observed_at) "
+        "VALUES ('binance', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             env.product,
             env.symbol,
@@ -315,6 +346,7 @@ async def _write_mark_price(conn: aiosqlite.Connection, env: Envelope) -> None:
             p.get("estimated_settle_price"),
             p.get("funding_rate"),
             p.get("next_funding_time"),
+            p.get("event_time"),
             env.observed_at,
         ),
     )
@@ -333,6 +365,8 @@ _NORMALIZERS = {
     "open_interest": _write_open_interest,
     "liquidation": _write_liquidation,
     "mark_price": _write_mark_price,
+    "futures_positioning": _write_futures_positioning,
+    "symbol_coverage": _write_symbol_coverage,
 }
 
 

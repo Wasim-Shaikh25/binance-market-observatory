@@ -26,17 +26,28 @@ between "implemented" and "done."
     liquidations, mark price.
   - Options connector: raw-fidelity-only (see its docstring), disabled by default
     pending live wire-format verification.
+  - Futures public positioning data (`futures_positioning`: global/top-trader
+    long-short account ratios, top-trader position ratio, taker buy/sell ratio),
+    stored raw with no interpretation.
+  - Explicit coverage-tier tracking (`symbol_coverage`): every symbol in the universe
+    is tagged `BROAD` or `HIGH_RESOLUTION` every depth-refresh cycle, so which symbols
+    got rich data is a queryable fact, not something to infer indirectly.
   - Every trade/aggTrade row carries `buyer_maker` and a derived `taker_side`
     (BUY/SELL) so side is always explicit, not just inferable.
   - Every row carries `product` + `symbol` so Spot/USDM/COINM/Options data for the
     same underlying symbol is always distinguishable.
+  - Source (exchange) timestamps are stored distinct from `observed_at` (this
+    collector's receive/poll time) everywhere Binance provides one -- audited
+    table-by-table; `book_ticker` is documented as a genuine exception (Binance's
+    payload for that stream carries no timestamp at all).
   - `config/settings.yaml` capability registry: each product independently
     enable-able, depth top-N/ranking/refresh configurable, rate-limit budgets
     configurable.
   - `src/main.py` entrypoint, `src/audit.py` CLI for the correctness audit report.
-- 41 automated tests (unit + a full pipeline integration test against
+- 52 automated tests (unit + a full pipeline integration test against
   `tests/mock_binance.py`, a local protocol-faithful stand-in for Binance) -- all
-  passing. Caught and fixed three real bugs in the process (see `CHANGELOG.md`).
+  passing. Caught and fixed four real bugs in the process (see `CHANGELOG.md`), all
+  via the same automated INSERT column/placeholder check plus behavioral tests.
 - Per-run database files (`data/market_<run_id>.db`, one per start/stop cycle) and
   `scripts/collector.sh start|stop|status|tail` for running detached in the
   background -- see `docs/requirements/2026-08-27-per-run-db-and-background-run-scripts/`.
@@ -59,6 +70,11 @@ between "implemented" and "done."
 - Options normalized tables are not implemented (raw-fidelity only, disabled by
   default) -- confirm the current Options wire format against Binance's live docs and
   add normalizers following `connectors/common.py`'s pattern before enabling it.
+- The `/futures/data/<metric>` positioning endpoint paths (`connectors/usdm.py`/
+  `coinm.py`) are unverified against live Binance docs -- same sandbox constraint. A
+  wrong path fails loud as `rest_failure`, so this is self-detecting, but confirm the
+  paths (and, for COIN-M, whether the same relative paths even apply) before trusting
+  `futures_positioning` on a live run.
 - Rate-limit budgets in `config/settings.yaml` are conservative defaults; re-verify
   them against Binance's current documented limits periodically. The limiter
   self-corrects against the server's reported used-weight, which bounds the damage

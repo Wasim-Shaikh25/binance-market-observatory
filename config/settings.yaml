@@ -50,6 +50,10 @@ products:
       refresh_minutes: 15
     funding_poll_minutes: 5
     open_interest_poll_minutes: 5
+    # Polls the depth-tracked symbol set only, same rationale as open interest
+    # above: bound REST weight usage by the same top-N config. Endpoint paths
+    # are unverified against live docs from this sandbox -- see connectors/usdm.py.
+    positioning_poll_minutes: 15
 
   coinm_futures:
     enabled: true
@@ -68,6 +72,10 @@ products:
       refresh_minutes: 15
     funding_poll_minutes: 5
     open_interest_poll_minutes: 5
+    # Polls the depth-tracked symbol set only, same rationale as open interest
+    # above: bound REST weight usage by the same top-N config. Endpoint paths
+    # are unverified against live docs from this sandbox -- see connectors/usdm.py.
+    positioning_poll_minutes: 15
 
   # Disabled by default -- see connectors/options.py docstring: the public
   # wire format could not be verified against live Binance docs from this

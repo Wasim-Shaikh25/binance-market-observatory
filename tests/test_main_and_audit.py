@@ -72,5 +72,7 @@ async def test_main_run_wires_config_to_database(tmp_path):
         assert "SPOT" in report
         assert "Symbol coverage" in report
         assert "Depth resyncs" in report
+        assert "Coverage tiers" in report
+        assert "Futures positioning" in report
     finally:
         await conn.close()

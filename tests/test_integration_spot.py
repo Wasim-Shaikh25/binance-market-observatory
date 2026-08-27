@@ -124,4 +124,11 @@ async def test_spot_connector_end_to_end(tmp_path):
     cur = await conn.execute("SELECT COUNT(*) FROM system_events WHERE event_type='depth_resync' AND symbol='BTCUSDT'")
     assert (await cur.fetchone())[0] > 0, "expected the mock server's injected update-ID gap to trigger a resync"
 
+    # --- Coverage tier: BTCUSDT is in the (only) symbol in the universe and within
+    # top_n=5, so it must be recorded as HIGH_RESOLUTION, not silently untracked ---
+    cur = await conn.execute("SELECT tier FROM symbol_coverage WHERE symbol='BTCUSDT' ORDER BY id DESC LIMIT 1")
+    row = await cur.fetchone()
+    assert row is not None, "expected a coverage-tier row for BTCUSDT"
+    assert row[0] == "HIGH_RESOLUTION"
+
     await conn.close()

@@ -5,6 +5,38 @@ making any change — see `AGENTS.md` rule 5.
 
 Format: reverse chronological, one entry per change, dated.
 
+## 2026-08-27 (5)
+
+- Addressed a pre-3-day-capture review: verified liquidations and raw-payload
+  preservation were already correct (no change needed), and closed three real gaps:
+  - **Futures positioning data**: new `futures_positioning` table + `positioning_loop`
+    polling Binance's public long/short ratio endpoints
+    (`globalLongShortAccountRatio`, `topLongShortAccountRatio`,
+    `topLongShortPositionRatio`, `takerlongshortRatio`) for the depth-tracked symbol
+    set on USDS-M/COIN-M. Stored exactly as requested -- timestamp, symbol, metric,
+    value, source, raw payload -- with no interpretation. These endpoint paths are
+    unverified against live Binance docs (this sandbox still can't reach it); a wrong
+    path fails loud as `rest_failure`, not silently.
+  - **Coverage tiers**: new `symbol_coverage` table, written every depth-refresh cycle
+    for the *entire* symbol universe (not just the depth-tracked subset), tagging each
+    symbol `BROAD` or `HIGH_RESOLUTION` -- so a future "nothing interesting in
+    small-caps" finding can never be silently confounded with "small-caps never got
+    instrumented."
+  - **Timestamp audit**: added `open_interest.observation_time` (the actual bug the
+    review's "collected at 13:05 != measured at 13:05" example called out -- it was
+    previously missing entirely), plus `event_time` on `mark_price`/`agg_trades`/
+    `ticker_24h` and `event_time`/`transaction_time` on `depth_snapshots`. Documented
+    (didn't fabricate) that `book_ticker` has no source timestamp because Binance's
+    payload for that stream doesn't provide one.
+  - Options status unchanged: raw-fidelity-only, disabled by default, still blocked on
+    live wire-format verification -- explicitly out of scope for this change.
+  - New requirement folder:
+    `docs/requirements/2026-08-27-positioning-coverage-tiers-and-timestamp-audit/`.
+  - Caught another real bug via the same automated INSERT column/placeholder check
+    used last time: `_write_depth_snapshot` was short one `?` placeholder after adding
+    the two new columns -- fixed before it ever ran.
+  - 11 new tests, 52 total, all passing.
+
 ## 2026-08-27 (4)
 
 - Added per-run database files and background run scripts, per the user's request:

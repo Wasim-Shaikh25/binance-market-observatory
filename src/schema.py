@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS agg_trades (
     price TEXT NOT NULL,
     quantity TEXT NOT NULL,
     trade_time INTEGER NOT NULL,
+    event_time INTEGER,
     buyer_maker INTEGER NOT NULL,
     taker_side TEXT NOT NULL,
     observed_at TEXT NOT NULL,
@@ -86,6 +87,9 @@ CREATE TABLE IF NOT EXISTS agg_trades (
 );
 CREATE INDEX IF NOT EXISTS idx_agg_trades_symbol_time ON agg_trades(product, symbol, trade_time);
 
+-- Binance's bookTicker payload carries no exchange-side timestamp at all (only
+-- `update_id`, a sequence number) -- there is no source timestamp to capture here.
+-- This is an upstream limitation, not an oversight; see docs/THESIS.md timestamp audit.
 CREATE TABLE IF NOT EXISTS book_ticker (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     exchange TEXT NOT NULL DEFAULT 'binance',
@@ -116,6 +120,7 @@ CREATE TABLE IF NOT EXISTS ticker_24h (
     quote_volume TEXT,
     open_time INTEGER,
     close_time INTEGER,
+    event_time INTEGER,
     first_trade_id INTEGER,
     last_trade_id INTEGER,
     trade_count INTEGER,
@@ -155,6 +160,8 @@ CREATE TABLE IF NOT EXISTS depth_snapshots (
     last_update_id INTEGER NOT NULL,
     bids_json TEXT NOT NULL,
     asks_json TEXT NOT NULL,
+    event_time INTEGER,        -- futures REST snapshots only; null for spot (not provided)
+    transaction_time INTEGER,  -- futures REST snapshots only; null for spot (not provided)
     observed_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_depth_snapshots_symbol_time
@@ -193,9 +200,25 @@ CREATE TABLE IF NOT EXISTS open_interest (
     product TEXT NOT NULL,
     symbol TEXT NOT NULL,
     open_interest TEXT NOT NULL,
-    observed_at TEXT NOT NULL
+    observation_time INTEGER,  -- Binance's own `time` field: when the value was measured
+    observed_at TEXT NOT NULL  -- when this collector polled it -- these are NOT the same instant
 );
 CREATE INDEX IF NOT EXISTS idx_open_interest_symbol_time ON open_interest(product, symbol, observed_at);
+
+CREATE TABLE IF NOT EXISTS futures_positioning (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    exchange TEXT NOT NULL DEFAULT 'binance',
+    product TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    metric TEXT NOT NULL,       -- e.g. globalLongShortAccountRatio, topLongShortPositionRatio
+    value TEXT NOT NULL,        -- the endpoint's primary ratio field, verbatim -- no interpretation
+    observation_time INTEGER,   -- Binance's own timestamp for this data point
+    source_endpoint TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_futures_positioning_symbol_metric_time
+    ON futures_positioning(product, symbol, metric, observation_time);
 
 CREATE TABLE IF NOT EXISTS liquidations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -223,9 +246,22 @@ CREATE TABLE IF NOT EXISTS mark_price (
     estimated_settle_price TEXT,
     funding_rate TEXT,
     next_funding_time INTEGER,
+    event_time INTEGER,
     observed_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_mark_price_symbol_time ON mark_price(product, symbol, observed_at);
+
+-- Explicit, queryable record of which coverage tier each symbol had at each point in
+-- time -- so "the model found nothing in small-caps" can never be silently explained
+-- by "small-caps never got rich data" without that being visible in the data itself.
+CREATE TABLE IF NOT EXISTS symbol_coverage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    tier TEXT NOT NULL,  -- BROAD | HIGH_RESOLUTION
+    observed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_symbol_coverage_symbol_time ON symbol_coverage(product, symbol, observed_at);
 
 CREATE TABLE IF NOT EXISTS health (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

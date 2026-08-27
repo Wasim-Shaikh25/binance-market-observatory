@@ -92,6 +92,36 @@ async def generate_audit_report(conn: aiosqlite.Connection, db_path: str, stale_
         lines.append(f"- {product} {symbol}: last seen {last_seen}")
     lines.append("")
 
+    lines.append("## Coverage tiers (latest assignment per symbol)\n")
+    cur = await conn.execute(
+        """
+        SELECT product, tier, COUNT(*) FROM (
+            SELECT product, symbol, tier,
+                   ROW_NUMBER() OVER (PARTITION BY product, symbol ORDER BY id DESC) AS rn
+            FROM symbol_coverage
+        ) WHERE rn = 1
+        GROUP BY product, tier ORDER BY product, tier
+        """
+    )
+    rows = await cur.fetchall()
+    if not rows:
+        lines.append("No coverage-tier data yet.\n")
+    for product, tier, count in rows:
+        lines.append(f"- {product} {tier}: {count} symbols")
+    lines.append("")
+
+    lines.append("## Futures positioning data\n")
+    cur = await conn.execute(
+        "SELECT product, metric, COUNT(DISTINCT symbol), COUNT(*) FROM futures_positioning "
+        "GROUP BY product, metric ORDER BY product, metric"
+    )
+    rows = await cur.fetchall()
+    if not rows:
+        lines.append("No positioning data yet (disabled, not yet due to poll, or the endpoint is failing -- check REST failures above).\n")
+    for product, metric, symbols, count in rows:
+        lines.append(f"- {product} / {metric}: {count} observations across {symbols} symbols")
+    lines.append("")
+
     lines.append("## Storage\n")
     for suffix in ("", "-wal", "-shm"):
         p = db_path + suffix

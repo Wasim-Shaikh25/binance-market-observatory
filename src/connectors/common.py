@@ -36,6 +36,7 @@ def parse_agg_trade(data: dict[str, Any]) -> dict[str, Any]:
         "price": data["p"],
         "quantity": data["q"],
         "trade_time": data["T"],
+        "event_time": data.get("E"),
         "buyer_maker": bool(data["m"]),
     }
 
@@ -63,6 +64,7 @@ def parse_ticker_24h(data: dict[str, Any]) -> dict[str, Any]:
         "quote_volume": data.get("q"),
         "open_time": data.get("O"),
         "close_time": data.get("C"),
+        "event_time": data.get("E"),
         "first_trade_id": data.get("F"),
         "last_trade_id": data.get("L"),
         "trade_count": data.get("n"),
@@ -104,6 +106,10 @@ def parse_depth_snapshot(data: dict[str, Any]) -> dict[str, Any]:
         "last_update_id": data["lastUpdateId"],
         "bids": data.get("bids", []),
         "asks": data.get("asks", []),
+        # Present on futures' REST depth snapshot response; absent on spot's,
+        # which genuinely doesn't return them.
+        "event_time": data.get("E"),
+        "transaction_time": data.get("T"),
     }
 
 
@@ -114,6 +120,7 @@ def parse_mark_price(data: dict[str, Any]) -> dict[str, Any]:
         "estimated_settle_price": data.get("P"),
         "funding_rate": data.get("r"),
         "next_funding_time": data.get("T"),
+        "event_time": data.get("E"),
     }
 
 
@@ -166,3 +173,30 @@ def parse_symbol_info(sym: dict[str, Any]) -> dict[str, Any]:
     if "isMarginTradingAllowed" in sym:
         out["margin_tradable"] = bool(sym["isMarginTradingAllowed"])
     return out
+
+
+def parse_open_interest(data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "open_interest": data["openInterest"],
+        "observation_time": data.get("time"),
+    }
+
+
+# Each positioning endpoint's primary ratio field has a different name; the
+# raw payload is preserved regardless (see storage._write_futures_positioning),
+# this just says which field is "the value" for the requested no-interpretation
+# storage: {timestamp, symbol, metric, value, source, raw payload}.
+POSITIONING_VALUE_FIELDS = {
+    "globalLongShortAccountRatio": "longShortRatio",
+    "topLongShortAccountRatio": "longShortRatio",
+    "topLongShortPositionRatio": "longShortRatio",
+    "takerlongshortRatio": "buySellRatio",
+}
+
+
+def parse_positioning_entry(metric: str, entry: dict[str, Any]) -> dict[str, Any]:
+    value_field = POSITIONING_VALUE_FIELDS.get(metric)
+    return {
+        "value": entry.get(value_field) if value_field else None,
+        "observation_time": entry.get("timestamp"),
+    }

@@ -56,3 +56,56 @@ def test_parse_force_order_extracts_side_and_price():
     assert parsed["side"] == "SELL"
     assert parsed["price"] == "49000.00"
     assert parsed["order_status"] == "FILLED"
+
+
+def test_parse_agg_trade_captures_event_time():
+    data = {"a": 1, "p": "1", "q": "1", "T": 100, "E": 101, "m": False}
+    assert common.parse_agg_trade(data)["event_time"] == 101
+
+
+def test_parse_ticker_24h_captures_event_time():
+    data = {"E": 123, "O": 100, "C": 200}
+    parsed = common.parse_ticker_24h(data)
+    assert parsed["event_time"] == 123
+    assert parsed["open_time"] == 100
+    assert parsed["close_time"] == 200
+
+
+def test_parse_mark_price_captures_event_time():
+    parsed = common.parse_mark_price({"p": "50000", "E": 999})
+    assert parsed["event_time"] == 999
+
+
+def test_parse_depth_snapshot_captures_futures_timestamps_when_present():
+    # Spot's REST depth snapshot has no E/T fields at all.
+    spot = common.parse_depth_snapshot({"lastUpdateId": 1, "bids": [], "asks": []})
+    assert spot["event_time"] is None
+    assert spot["transaction_time"] is None
+
+    # Futures' REST depth snapshot does carry them.
+    futures = common.parse_depth_snapshot({"lastUpdateId": 1, "bids": [], "asks": [], "E": 111, "T": 222})
+    assert futures["event_time"] == 111
+    assert futures["transaction_time"] == 222
+
+
+def test_parse_open_interest_captures_source_time_distinct_from_receive_time():
+    parsed = common.parse_open_interest({"openInterest": "12345.6", "symbol": "BTCUSDT", "time": 1700000000000})
+    assert parsed == {"open_interest": "12345.6", "observation_time": 1700000000000}
+
+
+def test_parse_positioning_entry_picks_the_right_value_field_per_metric():
+    entry = {"symbol": "BTCUSDT", "longShortRatio": "1.43", "longAccount": "0.59", "shortAccount": "0.41", "timestamp": 1700000000000}
+    parsed = common.parse_positioning_entry("globalLongShortAccountRatio", entry)
+    assert parsed == {"value": "1.43", "observation_time": 1700000000000}
+
+
+def test_parse_positioning_entry_taker_ratio_uses_buy_sell_ratio_field():
+    entry = {"buySellRatio": "1.51", "buyVol": "100", "sellVol": "66", "timestamp": 1700000000000}
+    parsed = common.parse_positioning_entry("takerlongshortRatio", entry)
+    assert parsed["value"] == "1.51"
+
+
+def test_parse_positioning_entry_unknown_metric_has_no_value():
+    parsed = common.parse_positioning_entry("somethingNew", {"timestamp": 1})
+    assert parsed["value"] is None
+    assert parsed["observation_time"] == 1

@@ -43,6 +43,8 @@ class ProductPaths:
     open_interest_path: str | None = None
     force_order_stream: str | None = None  # e.g. "!forceOrder@arr"
     mark_price_suffix: str | None = None  # e.g. "@markPrice@1s"
+    positioning_endpoints: tuple[str, ...] = ()  # metric names, e.g. "globalLongShortAccountRatio"
+    positioning_path_prefix: str = "/futures/data/"  # override per-product if the real path differs
 
 
 @dataclass
@@ -297,16 +299,35 @@ class DepthConnectionGroup:
             self._resyncing.discard(symbol)
 
 
+async def _record_coverage_tiers(cfg: ProductConfig, ctx: ConnectorContext, universe: list[str], high_res: set[str]) -> None:
+    """One row per universe symbol per depth-refresh cycle, tagging it BROAD
+    or HIGH_RESOLUTION -- an explicit, queryable record of which tier each
+    symbol had at each point in time (docs/requirements/2026-08-27-
+    positioning-coverage-tiers-and-timestamp-audit/)."""
+    for symbol in universe:
+        tier = "HIGH_RESOLUTION" if symbol in high_res else "BROAD"
+        await ctx.queue.put(
+            Envelope(
+                product=cfg.tag,
+                stream_name="coverage_tier",
+                source_endpoint="internal",
+                kind="symbol_coverage",
+                payload={"tier": tier},
+                symbol=symbol.upper(),
+            )
+        )
+
+
 async def depth_supervisor(cfg: ProductConfig, ctx: ConnectorContext, paths: ProductPaths, holder: dict) -> None:
     """Runs the persistent depth connection and periodically refreshes its
     target symbol set. `holder["group"]` is exposed so other loops (e.g.
     open-interest polling) can piggyback on the same depth-tracked symbol
-    set without recomputing it themselves."""
-    if not cfg.depth.enabled:
-        return
+    set without recomputing it themselves. Also records each cycle's
+    coverage-tier assignment for the whole universe, not just the
+    depth-tracked subset."""
     group = DepthConnectionGroup(cfg, ctx, paths)
     holder["group"] = group
-    run_task = asyncio.create_task(group.run())
+    run_task = asyncio.create_task(group.run()) if cfg.depth.enabled else None
     try:
         while True:
             try:
@@ -316,11 +337,15 @@ async def depth_supervisor(cfg: ProductConfig, ctx: ConnectorContext, paths: Pro
                 await log_system_event(ctx.db, "rest_failure", detail=f"depth universe: {exc}", product=cfg.tag)
                 await asyncio.sleep(30)
                 continue
-            await group.set_target_symbols(select_depth_symbols(cfg, ctx, universe))
+            high_res = select_depth_symbols(cfg, ctx, universe) if cfg.depth.enabled else set()
+            if run_task is not None:
+                await group.set_target_symbols(high_res)
+            await _record_coverage_tiers(cfg, ctx, universe, high_res)
             await asyncio.sleep(max(cfg.depth.refresh_minutes, 1) * 60)
     finally:
-        run_task.cancel()
-        await asyncio.gather(run_task, return_exceptions=True)
+        if run_task is not None:
+            run_task.cancel()
+            await asyncio.gather(run_task, return_exceptions=True)
 
 
 async def open_interest_loop(cfg: ProductConfig, ctx: ConnectorContext, paths: ProductPaths, symbols_provider) -> None:
@@ -337,7 +362,7 @@ async def open_interest_loop(cfg: ProductConfig, ctx: ConnectorContext, paths: P
                         stream_name="openInterest",
                         source_endpoint=cfg.rest_base_url + paths.open_interest_path,
                         kind="open_interest",
-                        payload={"open_interest": data["openInterest"]},
+                        payload=common.parse_open_interest(data),
                         symbol=symbol.upper(),
                     )
                 )
@@ -345,6 +370,45 @@ async def open_interest_loop(cfg: ProductConfig, ctx: ConnectorContext, paths: P
                 logger.exception("open interest poll failed for %s", symbol)
                 await log_system_event(ctx.db, "rest_failure", detail=f"open_interest {symbol}: {exc}", product=cfg.tag, symbol=symbol.upper())
         await asyncio.sleep(max(cfg.open_interest_poll_minutes, 1) * 60)
+
+
+async def positioning_loop(cfg: ProductConfig, ctx: ConnectorContext, paths: ProductPaths, symbols_provider) -> None:
+    """Polls Binance's public futures positioning endpoints (long/short
+    ratios) for the depth-tracked symbol set, storing them exactly as
+    requested: timestamp, symbol, metric, value, source, raw payload --
+    no interpretation. These specific endpoint paths could not be verified
+    against live Binance docs from this sandbox (see STATUS.md); a wrong
+    path surfaces as a visible rest_failure system_event rather than
+    silently storing nothing."""
+    if not paths.positioning_endpoints or not cfg.positioning_poll_minutes:
+        return
+    while True:
+        symbols = symbols_provider()
+        for symbol in symbols:
+            for metric in paths.positioning_endpoints:
+                endpoint = f"{paths.positioning_path_prefix}{metric}"
+                try:
+                    data = await ctx.rest.get_json(endpoint, weight=1, params={"symbol": symbol.upper(), "period": "5m", "limit": 1})
+                    if not data:
+                        continue
+                    entry = data[-1]
+                    parsed = common.parse_positioning_entry(metric, entry)
+                    await ctx.queue.put(
+                        Envelope(
+                            product=cfg.tag,
+                            stream_name=metric,
+                            source_endpoint=cfg.rest_base_url + endpoint,
+                            kind="futures_positioning",
+                            payload={"metric": metric, "value": parsed["value"], "observation_time": parsed["observation_time"], "raw": entry},
+                            symbol=symbol.upper(),
+                        )
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("positioning poll failed for %s/%s", symbol, metric)
+                    await log_system_event(
+                        ctx.db, "rest_failure", detail=f"positioning {metric} {symbol}: {exc}", product=cfg.tag, symbol=symbol.upper()
+                    )
+        await asyncio.sleep(max(cfg.positioning_poll_minutes, 1) * 60)
 
 
 async def run_market_product(cfg: ProductConfig, ctx: ConnectorContext, paths: ProductPaths) -> None:
@@ -359,6 +423,17 @@ async def run_market_product(cfg: ProductConfig, ctx: ConnectorContext, paths: P
         tasks.append(
             asyncio.create_task(
                 open_interest_loop(
+                    cfg,
+                    ctx,
+                    paths,
+                    lambda: list(depth_group_holder["group"].target) if "group" in depth_group_holder else [],
+                )
+            )
+        )
+    if paths.positioning_endpoints:
+        tasks.append(
+            asyncio.create_task(
+                positioning_loop(
                     cfg,
                     ctx,
                     paths,

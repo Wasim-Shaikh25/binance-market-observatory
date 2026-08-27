@@ -134,3 +134,53 @@ async def test_unknown_kind_stores_raw_only(tmp_path):
     cur = await conn.execute("SELECT COUNT(*) FROM raw_events")
     assert (await cur.fetchone())[0] == 1
     await conn.close()
+
+
+async def test_open_interest_preserves_source_time_distinct_from_receive_time(tmp_path):
+    conn = await open_db(str(tmp_path / "test.db"))
+    env = Envelope(product="USDM_FUTURES", stream_name="openInterest", source_endpoint="rest", kind="open_interest",
+                    payload={"open_interest": "12345.6", "observation_time": 1700000000000}, symbol="BTCUSDT")
+    await _write_all(conn, [env])
+    cur = await conn.execute("SELECT open_interest, observation_time, observed_at FROM open_interest")
+    row = await cur.fetchone()
+    assert row[0] == "12345.6"
+    assert row[1] == 1700000000000
+    assert row[2] == env.observed_at
+    assert row[1] != row[2]  # source measurement time is not the same instant as our receive time
+    await conn.close()
+
+
+async def test_futures_positioning_stores_value_source_and_raw_payload(tmp_path):
+    conn = await open_db(str(tmp_path / "test.db"))
+    raw_entry = {"symbol": "BTCUSDT", "longShortRatio": "1.43", "longAccount": "0.59", "timestamp": 1700000000000}
+    env = Envelope(
+        product="USDM_FUTURES", stream_name="globalLongShortAccountRatio",
+        source_endpoint="https://fapi.binance.com/futures/data/globalLongShortAccountRatio",
+        kind="futures_positioning",
+        payload={"metric": "globalLongShortAccountRatio", "value": "1.43", "observation_time": 1700000000000, "raw": raw_entry},
+        symbol="BTCUSDT",
+    )
+    await _write_all(conn, [env])
+    cur = await conn.execute("SELECT metric, value, observation_time, source_endpoint, payload_json FROM futures_positioning")
+    row = await cur.fetchone()
+    assert row[0] == "globalLongShortAccountRatio"
+    assert row[1] == "1.43"
+    assert row[2] == 1700000000000
+    assert row[3].endswith("globalLongShortAccountRatio")
+    assert json.loads(row[4]) == raw_entry
+    await conn.close()
+
+
+async def test_symbol_coverage_tier_recorded(tmp_path):
+    conn = await open_db(str(tmp_path / "test.db"))
+    envs = [
+        Envelope(product="SPOT", stream_name="coverage_tier", source_endpoint="internal", kind="symbol_coverage",
+                  payload={"tier": "HIGH_RESOLUTION"}, symbol="BTCUSDT"),
+        Envelope(product="SPOT", stream_name="coverage_tier", source_endpoint="internal", kind="symbol_coverage",
+                  payload={"tier": "BROAD"}, symbol="SHIBUSDT"),
+    ]
+    await _write_all(conn, envs)
+    cur = await conn.execute("SELECT symbol, tier FROM symbol_coverage ORDER BY symbol")
+    rows = await cur.fetchall()
+    assert rows == [("BTCUSDT", "HIGH_RESOLUTION"), ("SHIBUSDT", "BROAD")]
+    await conn.close()

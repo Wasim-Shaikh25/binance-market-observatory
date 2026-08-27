@@ -47,6 +47,7 @@ class ProductConfig:
     depth: DepthConfig = field(default_factory=DepthConfig)
     funding_poll_minutes: int | None = None
     open_interest_poll_minutes: int | None = None
+    positioning_poll_minutes: int | None = None
 
 
 @dataclass
@@ -80,6 +81,7 @@ def load_settings(path: str) -> Settings:
             depth=DepthConfig(**depth_raw),
             funding_poll_minutes=p.get("funding_poll_minutes"),
             open_interest_poll_minutes=p.get("open_interest_poll_minutes"),
+            positioning_poll_minutes=p.get("positioning_poll_minutes"),
         )
 
     rl = raw.get("rate_limits", {})

@@ -77,13 +77,26 @@ never through reaching into another connector's internals.
 - `ticker_24h` — rolling 24h statistics
 - `candles` — klines per interval
 - `depth_snapshots` / `depth_updates` — order book state per §5.4 of `THESIS.md`
-- `funding_rate`, `open_interest`, `liquidations`, `mark_price` — futures/options data
-  classes, present only for products whose API exposes them
+- `funding_rate`, `open_interest`, `liquidations`, `mark_price` — futures data classes,
+  present only for products whose API exposes them
+- `futures_positioning` — public long/short positioning ratios (global account,
+  top-trader account, top-trader position, taker buy/sell), stored raw with no
+  interpretation: `metric`, `value`, `observation_time`, `source_endpoint`, `payload_json`
+- `symbol_coverage` — an explicit, queryable record of which tier (`BROAD` vs
+  `HIGH_RESOLUTION`) each symbol had at each point in time, written every
+  depth-refresh cycle for the whole universe, not just the depth-tracked subset (see
+  §5.5)
 - `health` — per-connector/per-stream rollups (event counts, gap counts, reconnects, etc.)
 - `system_events` — reconnects, resyncs, REST failures, DB write failures
 
 All price/quantity/decimal columns are `TEXT` holding canonical decimal strings, never
-floating point.
+floating point. Every table that receives a Binance-supplied timestamp for its data
+point stores it in a dedicated column, distinct from `observed_at` (this collector's
+own receive/poll time) -- e.g. `open_interest.observation_time` is when Binance
+measured the value, not when this collector happened to poll it. The one exception is
+`book_ticker`: Binance's payload for that stream carries no timestamp at all (only an
+update ID), which is documented in the schema as an upstream limitation, not an
+oversight.
 
 ## 4. Capability registry
 
@@ -99,6 +112,18 @@ and/or a single connector, never as a ripple across the schema.
 See `THESIS.md` §5.4 for the full diagram and reasoning. Implementation note: this is
 per-symbol state (each symbol being depth-tracked has its own snapshot/update-ID/local
 book state), not a single global state machine.
+
+## 5.5 Two-tier coverage
+
+Only the depth-tracked top-N symbols get full order book depth (and, for futures, open
+interest and positioning data) -- the rest of the universe still gets the cheap feeds
+(trades, bookTicker, ticker, candles) via the broad streams. This is a deliberate
+compute/storage tradeoff, but it must never quietly bias what gets studied: a future
+finding of "nothing interesting happens in small-cap symbols" must be distinguishable
+from "small-cap symbols never got instrumented well enough to tell." `symbol_coverage`
+makes the tier assignment an explicit, queryable fact recorded every depth-refresh
+cycle (`connectors/market.py`'s `_record_coverage_tiers`), for every universe symbol,
+not just the ones currently in the high-resolution set.
 
 ## 6. Tech stack (locked, as of the Phase 1 implementation)
 
