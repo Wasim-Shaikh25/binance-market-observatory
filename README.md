@@ -20,7 +20,7 @@ for the full reasoning and `docs/SCOPE.md` for the enforced boundary.
 ## Current status
 
 All four products are implemented (`src/`) and tested end-to-end against a local mock
-Binance server (35 tests, `tests/`) — see `STATUS.md` for the full picture. **Not yet
+Binance server (41 tests, `tests/`) — see `STATUS.md` for the full picture. **Not yet
 run against real Binance**: this project's development sandbox cannot reach Binance's
 servers, so a live run from a machine with normal network access is the one remaining
 step before the collector is considered done. See
@@ -31,10 +31,27 @@ step before the collector is considered done. See
 
 ```
 pip install -r requirements.txt
-python -m src.main                 # starts collecting into data/market.db
-python -m src.audit                # generates docs/THESIS.md #8's correctness audit report
-python -m pytest                   # 35 tests, no network required (uses a local mock)
+python -m src.main                 # starts collecting; Ctrl-C for a graceful stop
+python -m src.audit                # audits the most recent run (docs/THESIS.md #8)
+python -m pytest                   # 41 tests, no network required (uses a local mock)
 ```
+
+Each start gets its own database file: `config/settings.yaml`'s `database.path`
+contains a `{run_id}` placeholder (a UTC timestamp), so stopping and starting again
+begins a fresh `data/market_<run_id>.db` rather than appending to the last run.
+`python -m src.audit` with no arguments always targets the most recently modified one.
+
+### Running it in the background
+
+```
+scripts/collector.sh start    # launches detached, returns immediately
+scripts/collector.sh status   # is it running?
+scripts/collector.sh tail     # follow the current run's log
+scripts/collector.sh stop     # graceful shutdown (SIGTERM), waits up to 30s
+```
+
+PID is tracked in `data/collector.pid`; logs land in `data/logs/run_<run_id>.log`,
+one per run, matching that run's database file.
 
 ## Working in this repo
 

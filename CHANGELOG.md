@@ -5,6 +5,27 @@ making any change — see `AGENTS.md` rule 5.
 
 Format: reverse chronological, one entry per change, dated.
 
+## 2026-08-27 (4)
+
+- Added per-run database files and background run scripts, per the user's request:
+  - `config/settings.yaml`'s `database.path` now defaults to `data/market_{run_id}.db`;
+    `src/config.py` gained `resolve_db_path`/`find_latest_db_path`, and `src/main.py`
+    generates a run ID (UTC timestamp, overridable via the `RUN_ID` env var) and logs
+    the resolved path at startup. A path with no `{run_id}` placeholder still works
+    unchanged (fixed-file mode), so nothing existing broke.
+  - `src/audit.py` gained `--db` and, without it, auto-discovers the most recently
+    modified run so "audit the run I just did" doesn't require remembering a filename.
+  - Added `scripts/collector.sh` (start/stop/status/tail) to run the collector detached
+    via `nohup` + a PID file, with SIGTERM for graceful shutdown (reuses `main.py`'s
+    existing signal handling) and one log file per run under `data/logs/`.
+  - Verified live in this sandbox: two consecutive start/stop cycles produced two
+    distinct database and log files, and `python -m src.audit` correctly picked the
+    newer one. Actual data collection during that smoke test failed as expected --
+    this sandbox still can't reach Binance -- unrelated to this change.
+  - New requirement folder:
+    `docs/requirements/2026-08-27-per-run-db-and-background-run-scripts/`.
+  - 6 new tests (`tests/test_run_id.py`), 41 total, all passing.
+
 ## 2026-08-27 (3)
 
 - Implemented the full collector: Spot, USDS-M Futures, COIN-M Futures (raw-fidelity

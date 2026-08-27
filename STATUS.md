@@ -34,9 +34,12 @@ between "implemented" and "done."
     enable-able, depth top-N/ranking/refresh configurable, rate-limit budgets
     configurable.
   - `src/main.py` entrypoint, `src/audit.py` CLI for the correctness audit report.
-- 35 automated tests (unit + a full pipeline integration test against
+- 41 automated tests (unit + a full pipeline integration test against
   `tests/mock_binance.py`, a local protocol-faithful stand-in for Binance) -- all
   passing. Caught and fixed three real bugs in the process (see `CHANGELOG.md`).
+- Per-run database files (`data/market_<run_id>.db`, one per start/stop cycle) and
+  `scripts/collector.sh start|stop|status|tail` for running detached in the
+  background -- see `docs/requirements/2026-08-27-per-run-db-and-background-run-scripts/`.
 
 ## Known gaps / risks
 
@@ -46,9 +49,10 @@ between "implemented" and "done."
   status/README endpoint). Every test in this repo therefore runs against a local
   mock, not the real exchange. **Before relying on this for real data collection**,
   run it from a machine with normal internet access: `pip install -r requirements.txt`,
-  then `python -m src.main`, and watch `data/market.db` fill in. If anything about
-  Binance's real wire format differs from what's implemented here, that will surface
-  immediately as parse errors / `db_write_failure` system_events -- check those first.
+  then `python -m src.main` (or `scripts/collector.sh start` to run it detached), and
+  watch `data/market_<run_id>.db` fill in. If anything about Binance's real wire
+  format differs from what's implemented here, that will surface immediately as parse
+  errors / `db_write_failure` system_events -- check those first.
 - Once running live, generate the audit report with `python -m src.audit` and read it
   per `docs/THESIS.md` #8 before trusting the dataset -- especially depth resync
   counts and stale-stream detection.

@@ -9,6 +9,8 @@ edit here, not a code change.
 
 from __future__ import annotations
 
+import glob
+import os
 from dataclasses import dataclass, field
 
 import yaml
@@ -87,3 +89,24 @@ def load_settings(path: str) -> Settings:
         ws_connections_per_5min=int(rl.get("ws_connections_per_5min", 150)),
         max_streams_per_connection=int(rl.get("max_streams_per_connection", 100)),
     )
+
+
+def resolve_db_path(template: str, run_id: str) -> str:
+    """Substitutes `{run_id}` into the configured database path so each run
+    gets its own file; a template with no placeholder is returned unchanged
+    (fixed-file mode, e.g. what tests pass explicitly)."""
+    if "{run_id}" in template:
+        return template.format(run_id=run_id)
+    return template
+
+
+def find_latest_db_path(template: str) -> str | None:
+    """Finds the most recently modified database file matching the
+    configured template, for tools (like the audit report) that want "the
+    run I just did" without the caller having to know its exact run ID."""
+    if "{run_id}" not in template:
+        return template if os.path.exists(template) else None
+    matches = glob.glob(template.replace("{run_id}", "*"))
+    if not matches:
+        return None
+    return max(matches, key=os.path.getmtime)

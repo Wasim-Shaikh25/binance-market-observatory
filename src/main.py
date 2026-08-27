@@ -1,8 +1,16 @@
 """Entrypoint: wires the capability registry to connectors, the internal
 queue, and the single DB writer (docs/ARCHITECTURE.md #1-#2).
 
+Each run gets its own database file if `database.path` in the config contains
+a `{run_id}` placeholder (the shipped default does) -- see
+docs/requirements/2026-08-27-per-run-db-and-background-run-scripts/. Stop
+with SIGINT/SIGTERM for a graceful shutdown (writer drained, DB closed).
+
 Usage:
     python -m src.main [--config config/settings.yaml]
+
+For running detached in the background with start/stop/status, see
+scripts/collector.sh.
 """
 
 from __future__ import annotations
@@ -10,11 +18,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import signal
+from datetime import datetime, timezone
 
 import aiohttp
 
-from .config import load_settings
+from .config import load_settings, resolve_db_path
 from .connectors import coinm, options, spot, usdm
 from .connectors.market import ConnectorContext
 from .binance_client import RestClient
@@ -32,9 +42,16 @@ RUNNERS = {
 }
 
 
+def _run_id() -> str:
+    return os.environ.get("RUN_ID") or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
 async def run(config_path: str) -> None:
     settings = load_settings(config_path)
-    conn = await open_db(settings.database_path)
+    run_id = _run_id()
+    db_path = resolve_db_path(settings.database_path, run_id)
+    logger.info("Run %s starting. Writing to database: %s", run_id, db_path)
+    conn = await open_db(db_path)
     queue: asyncio.Queue = asyncio.Queue(maxsize=10000)
     writer = DBWriter(conn, queue)
     writer_task = asyncio.create_task(writer.run())

@@ -9,7 +9,12 @@
 # them against Binance's current docs periodically regardless.
 
 database:
-  path: data/market.db
+  # {run_id} is substituted with a UTC timestamp (YYYYmmddTHHMMSSZ) once per
+  # process start, so each start/stop cycle gets its own file -- see
+  # docs/requirements/2026-08-27-per-run-db-and-background-run-scripts/.
+  # Remove the placeholder (e.g. just "data/market.db") to always append to
+  # one fixed file across runs instead.
+  path: data/market_{run_id}.db
 
 products:
   spot:
