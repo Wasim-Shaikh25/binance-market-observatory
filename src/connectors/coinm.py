@@ -1,11 +1,12 @@
 from ..config import ProductConfig
 from .market import ConnectorContext, ProductPaths, run_market_product
 
-# Positioning endpoint paths (docs/requirements/2026-08-27-positioning-coverage-tiers-
-# and-timestamp-audit/) could not be verified against live Binance docs from this
-# sandbox -- confirm before relying on them; a wrong path fails loud as a
-# rest_failure system_event rather than silently storing nothing. COIN-M's data API
-# is assumed to mirror USDS-M's relative paths under dapi.binance.com; re-verify.
+# Positioning paths verified live 2026-08-27: same `/futures/data/<metric>` prefix
+# as USDS-M, but the query key is `pair` (e.g. BTCUSD), not contract `symbol`
+# (BTCUSD_PERP) -- `symbol=` returns HTTP 400 on dapi.binance.com.
+# COIN-M has no `takerlongshortRatio` endpoint (404); the volume analogue is
+# `takerBuySellVol` (buy/sell volumes, no ratio field -- value stored as null,
+# full payload in payload_json).
 COINM_PATHS = ProductPaths(
     exchange_info_path="/dapi/v1/exchangeInfo",
     depth_path="/dapi/v1/depth",
@@ -17,8 +18,9 @@ COINM_PATHS = ProductPaths(
         "globalLongShortAccountRatio",
         "topLongShortAccountRatio",
         "topLongShortPositionRatio",
-        "takerlongshortRatio",
+        "takerBuySellVol",
     ),
+    positioning_query_param="pair",
 )
 
 

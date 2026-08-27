@@ -34,3 +34,18 @@ class Envelope:
     symbol: Optional[str] = None
     schema_version: str = "1"
     observed_at: str = field(default_factory=now_iso)
+    # websocket | rest_poll | rest_backfill. If None, inferred from source_endpoint.
+    source_type: Optional[str] = None
+
+
+def resolve_source_type(env: Envelope) -> str:
+    if env.source_type:
+        return env.source_type
+    ep = (env.source_endpoint or "").lower()
+    if ep == "internal" or ep.startswith("internal:"):
+        return "internal"
+    if ep.startswith("wss:") or ep.startswith("ws:"):
+        return "websocket"
+    if ep.startswith("http://") or ep.startswith("https://"):
+        return "rest_poll"
+    return "unknown"

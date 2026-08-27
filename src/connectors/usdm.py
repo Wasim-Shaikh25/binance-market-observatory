@@ -1,10 +1,11 @@
 from ..config import ProductConfig
 from .market import ConnectorContext, ProductPaths, run_market_product
 
-# Positioning endpoint paths (docs/requirements/2026-08-27-positioning-coverage-tiers-
-# and-timestamp-audit/) could not be verified against live Binance docs from this
-# sandbox -- confirm before relying on them; a wrong path fails loud as a
-# rest_failure system_event rather than silently storing nothing.
+# Positioning paths verified live 2026-08-27: `/futures/data/<metric>` with
+# `symbol=` (e.g. BTCUSDT) on fapi.binance.com.
+# WebSocket base URL must be wss://fstream.binancefuture.com (config) — the
+# fstream.binance.com host can silently omit aggTrade/ticker/kline/markPrice/
+# forceOrder while still delivering trade+bookTicker.
 USDM_PATHS = ProductPaths(
     exchange_info_path="/fapi/v1/exchangeInfo",
     depth_path="/fapi/v1/depth",

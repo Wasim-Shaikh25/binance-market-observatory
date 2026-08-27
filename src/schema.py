@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS raw_events (
     symbol TEXT,
     stream_name TEXT NOT NULL,
     source_endpoint TEXT NOT NULL,
+    source_type TEXT NOT NULL DEFAULT 'websocket',  -- websocket | rest_poll | rest_backfill
     schema_version TEXT NOT NULL DEFAULT '1',
     observed_at TEXT NOT NULL,
     payload_json TEXT NOT NULL
@@ -23,6 +24,8 @@ CREATE INDEX IF NOT EXISTS idx_raw_events_product_symbol_time
     ON raw_events(product, symbol, observed_at);
 CREATE INDEX IF NOT EXISTS idx_raw_events_stream
     ON raw_events(stream_name, observed_at);
+CREATE INDEX IF NOT EXISTS idx_raw_events_source_type
+    ON raw_events(source_type, observed_at);
 
 CREATE TABLE IF NOT EXISTS instruments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -263,6 +266,39 @@ CREATE TABLE IF NOT EXISTS symbol_coverage (
 );
 CREATE INDEX IF NOT EXISTS idx_symbol_coverage_symbol_time ON symbol_coverage(product, symbol, observed_at);
 
+-- Closed-interval history of DEPTH coverage tiers with explicit reasons.
+-- ended_at NULL means the assignment is still open.
+CREATE TABLE IF NOT EXISTS coverage_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    feed TEXT NOT NULL DEFAULT 'DEPTH',
+    tier TEXT NOT NULL,  -- BROAD | HIGH_RESOLUTION
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    reason TEXT NOT NULL,
+    close_reason TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_coverage_history_open
+    ON coverage_history(product, symbol, feed, ended_at);
+CREATE INDEX IF NOT EXISTS idx_coverage_history_symbol_time
+    ON coverage_history(product, symbol, started_at);
+
+-- Gap-fill job log: detected holes and recovery outcomes (does not store market data).
+CREATE TABLE IF NOT EXISTS gap_fill_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    feed TEXT NOT NULL,  -- agg_trades | candles
+    gap_start INTEGER,
+    gap_end INTEGER,
+    status TEXT NOT NULL,  -- detected | recovered | partial | failed | skipped
+    rows_inserted INTEGER NOT NULL DEFAULT 0,
+    detail TEXT,
+    observed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gap_fill_jobs_product_time ON gap_fill_jobs(product, observed_at);
+
 CREATE TABLE IF NOT EXISTS health (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     product TEXT NOT NULL,
@@ -283,9 +319,61 @@ CREATE TABLE IF NOT EXISTS system_events (
     observed_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_system_events_type_time ON system_events(event_type, observed_at);
+
+CREATE TABLE IF NOT EXISTS exchange_status (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    exchange TEXT NOT NULL DEFAULT 'binance',
+    status_code INTEGER,
+    msg TEXT,
+    observed_at TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_exchange_status_time ON exchange_status(observed_at);
+
+-- Options mark price + public IV/Greeks (from /eapi/v1/mark). Stored as text
+-- decimals; no interpretation beyond what Binance returns.
+CREATE TABLE IF NOT EXISTS options_mark (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    exchange TEXT NOT NULL DEFAULT 'binance',
+    product TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    mark_price TEXT,
+    mark_iv TEXT,
+    bid_iv TEXT,
+    ask_iv TEXT,
+    delta TEXT,
+    gamma TEXT,
+    theta TEXT,
+    vega TEXT,
+    observed_at TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_options_mark_symbol_time ON options_mark(product, symbol, observed_at);
+
+CREATE TABLE IF NOT EXISTS options_index (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    exchange TEXT NOT NULL DEFAULT 'binance',
+    product TEXT NOT NULL,
+    underlying TEXT NOT NULL,
+    index_price TEXT NOT NULL,
+    observation_time INTEGER,
+    observed_at TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_options_index_underlying_time ON options_index(underlying, observed_at);
 """
 
 
 async def init_schema(conn) -> None:
     await conn.executescript(SCHEMA_SQL)
+    # Migrations for DBs created before source_type existed.
+    cur = await conn.execute("PRAGMA table_info(raw_events)")
+    cols = {row[1] for row in await cur.fetchall()}
+    if "source_type" not in cols:
+        await conn.execute(
+            "ALTER TABLE raw_events ADD COLUMN source_type TEXT NOT NULL DEFAULT 'websocket'"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_raw_events_source_type ON raw_events(source_type, observed_at)"
+        )
     await conn.commit()

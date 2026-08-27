@@ -81,3 +81,14 @@ def test_reset_clears_state():
     assert t.last_update_id is None
     assert t.bids == {}
     assert not t.synced
+
+
+def test_stale_snapshot_restores_buffer_and_reports_failure():
+    t = DepthSyncTracker("btcusdt")
+    t.apply_update(diff(200, 210))  # far ahead of snapshot id 100
+    assert t.apply_snapshot(100, bids=[["10.0", "1.0"]], asks=[]) is False
+    assert t.last_update_id is None
+    assert not t.synced
+    # Buffer preserved so a retry can bridge once a fresher snapshot arrives.
+    assert len(t._buffer) == 1
+    assert t._buffer[0]["final_update_id"] == 210

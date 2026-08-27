@@ -51,11 +51,30 @@ class ProductConfig:
 
 
 @dataclass
+class ClickHouseSinkConfig:
+    enabled: bool = False
+    url: str = "http://127.0.0.1:8123"
+    user: str = "default"
+    password: str = "bench"
+    database: str = "bmo_{run_id}"
+    batch_size: int = 500
+
+
+@dataclass
+class RawArchiveConfig:
+    enabled: bool = False
+    path: str = "data/archive_{run_id}/raw.ndjson.zst"
+    rotate: str = "none"  # none | hour
+
+
+@dataclass
 class Settings:
     database_path: str
     products: dict[str, ProductConfig]
     ws_connections_per_5min: int = 150
     max_streams_per_connection: int = 100
+    clickhouse: ClickHouseSinkConfig = field(default_factory=ClickHouseSinkConfig)
+    raw_archive: RawArchiveConfig = field(default_factory=RawArchiveConfig)
 
 
 def load_settings(path: str) -> Settings:
@@ -85,21 +104,42 @@ def load_settings(path: str) -> Settings:
         )
 
     rl = raw.get("rate_limits", {})
+    sinks = raw.get("sinks") or {}
+    ch_raw = sinks.get("clickhouse") or {}
+    ar_raw = sinks.get("raw_archive") or {}
     return Settings(
         database_path=raw["database"]["path"],
         products=products,
         ws_connections_per_5min=int(rl.get("ws_connections_per_5min", 150)),
         max_streams_per_connection=int(rl.get("max_streams_per_connection", 100)),
+        clickhouse=ClickHouseSinkConfig(
+            enabled=bool(ch_raw.get("enabled", False)),
+            url=str(ch_raw.get("url", "http://127.0.0.1:8123")),
+            user=str(ch_raw.get("user", "default")),
+            password=str(ch_raw.get("password", "bench")),
+            database=str(ch_raw.get("database", "bmo_{run_id}")),
+            batch_size=int(ch_raw.get("batch_size", 500)),
+        ),
+        raw_archive=RawArchiveConfig(
+            enabled=bool(ar_raw.get("enabled", False)),
+            path=str(ar_raw.get("path", "data/archive_{run_id}/raw.ndjson.zst")),
+            rotate=str(ar_raw.get("rotate", "none")),
+        ),
     )
+
+
+def resolve_path_template(template: str, run_id: str) -> str:
+    """Substitutes `{run_id}` (and leaves other text intact)."""
+    if "{run_id}" in template:
+        return template.format(run_id=run_id)
+    return template
 
 
 def resolve_db_path(template: str, run_id: str) -> str:
     """Substitutes `{run_id}` into the configured database path so each run
     gets its own file; a template with no placeholder is returned unchanged
     (fixed-file mode, e.g. what tests pass explicitly)."""
-    if "{run_id}" in template:
-        return template.format(run_id=run_id)
-    return template
+    return resolve_path_template(template, run_id)
 
 
 def find_latest_db_path(template: str) -> str | None:

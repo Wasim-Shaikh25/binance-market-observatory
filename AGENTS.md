@@ -87,7 +87,40 @@ this checklist and **fix what you find yourself** — don't just report it and s
 Fix every issue you find, then update `CHANGELOG.md`, `STATUS.md`, and this folder's
 `TRACKER.md` in the same commit. Only then check the task off.
 
-## 8. Recommended tooling: Ponytail
+## 8. Research vs validation outputs — fixed folder layout
+
+Any **script** that is not part of the runtime collector (`src/`) and any
+**generated report** it produces must live under one of these trees — never in
+the repo root, never mixed into `src/`, and never dumped ad-hoc into `data/`
+(except the market SQLite files the collector writes):
+
+```
+research/
+  script/    # analysis / exploration scripts that *consume* observatory DBs
+  report/    # outputs those scripts generate (markdown, csv, plots, notes)
+
+validation/
+  script/    # probes, validators, audit runners, smoke helpers
+  report/    # validation/audit outputs (e.g. BINANCE_DATA_CAPTURE_REPORT.md)
+```
+
+Rules:
+
+1. **Validation** = data availability, integrity, completeness, timestamps,
+   provenance, storage correctness — no trading interpretation (see `SCOPE.md`).
+2. **Research** = downstream reading of collected data. Still no items on
+   `SCOPE.md`'s 🔴 list inside this repo (strategies, signals, ML training, etc.).
+   If a research idea crosses that line, it belongs in a separate project.
+3. When adding a new script, place it under `research/script/` or
+   `validation/script/` as appropriate; write its reports under the matching
+   `report/` folder.
+4. Prefer invoking library entrypoints (`python -m src.validate`,
+   `python -m src.audit`) with `--out` pointed at `validation/report/…`.
+5. Move existing stray reports/scripts into this layout when you touch them.
+6. Runtime collector code stays in `src/`; ops helpers like `scripts/collector.sh`
+   stay in `scripts/`; databases stay in `data/`.
+
+## 9. Recommended tooling: Ponytail
 
 [Ponytail](https://github.com/DietrichGebert/ponytail) is a Claude Code plugin that
 enforces the same discipline rule 7 already asks for: before writing new code, check

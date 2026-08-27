@@ -200,3 +200,40 @@ def parse_positioning_entry(metric: str, entry: dict[str, Any]) -> dict[str, Any
         "value": entry.get(value_field) if value_field else None,
         "observation_time": entry.get("timestamp"),
     }
+
+
+def positioning_rows(metric: str, entry: dict[str, Any]) -> list[dict[str, Any]]:
+    """Expand one REST positioning payload into one or more storage rows.
+
+    Most endpoints are a single ratio → one row. COIN-M's `takerBuySellVol`
+    exposes buy/sell *volumes* (no ratio field); emit both as separate
+    metrics so `futures_positioning.value` stays NOT NULL without inventing
+    a ratio.
+    """
+    if metric == "takerBuySellVol":
+        ts = entry.get("timestamp")
+        return [
+            {"metric": "takerBuyVol", "value": entry.get("takerBuyVol"), "observation_time": ts, "raw": entry},
+            {"metric": "takerSellVol", "value": entry.get("takerSellVol"), "observation_time": ts, "raw": entry},
+        ]
+    parsed = parse_positioning_entry(metric, entry)
+    return [
+        {
+            "metric": metric,
+            "value": parsed["value"],
+            "observation_time": parsed["observation_time"],
+            "raw": entry,
+        }
+    ]
+
+
+def coinm_pair_from_symbol(symbol: str) -> str:
+    """Map a COIN-M contract symbol to the `pair` query param Binance's
+    `/futures/data/*` endpoints expect (e.g. BTCUSD_PERP / BTCUSD_250926 → BTCUSD)."""
+    s = symbol.upper()
+    if s.endswith("_PERP"):
+        return s[: -len("_PERP")]
+    parts = s.rsplit("_", 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        return parts[0]
+    return s

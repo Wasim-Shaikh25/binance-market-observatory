@@ -19,6 +19,10 @@ it — flag the conflict to the user instead of building it.
 - Health/system-events tables and a written correctness audit (72h clean-run minimum)
 - Capability registry describing what's available per product/data-class
 - Decimal-as-text storage discipline for all price/quantity fields
+- Historical REST gap-fill for public recoverable feeds (`aggTrades`, `klines`) with
+  `source_type=rest_backfill`, never overwriting an existing live observation
+- `coverage_history` (started_at / ended_at / reason) for DEPTH tier changes so
+  research can distinguish "no depth existed" from "we were not tracking depth"
 
 ## 🟡 Modify-on-sight if found elsewhere
 
@@ -44,6 +48,10 @@ and correct if you find a variant drifting from this:
 - Order execution or exchange write access of any kind
 - Arbitrage detection or trading decisions
 - Anything resembling "Trade DNA" or similar behavioral-fingerprinting concepts
+- Scraping or inventing a Binance announcements feed when no stable public
+  machine-readable source exists (accepted limitation — see `THESIS.md` §11)
+- Treating Options WebSocket delivery as a hard requirement when public Options
+  REST already provides the needed market data (see `THESIS.md` §11)
 
 These belong to a later, separate project that may *consume* this project's database.
 If a request would add any of the above, stop and say so instead of implementing it —

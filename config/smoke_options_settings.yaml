@@ -1,0 +1,72 @@
+# Temporary Options-focused smoke: verify depth + OI + provenance quickly.
+database:
+  path: data/market_{run_id}.db
+
+products:
+  spot:
+    enabled: false
+    rest_base_url: https://api.binance.com
+    ws_base_url: wss://stream.binance.com:9443
+    rest_weight_per_minute: 1200
+    symbol_universe: list
+    symbol_list: []
+    instrument_poll_minutes: 60
+    kline_intervals: ["1m"]
+    depth:
+      enabled: false
+      mode: top_n
+      top_n: 1
+      ranking: quote_volume
+      refresh_minutes: 60
+
+  usdm_futures:
+    enabled: false
+    rest_base_url: https://fapi.binance.com
+    ws_base_url: wss://fstream.binancefuture.com
+    rest_weight_per_minute: 2000
+    symbol_universe: list
+    symbol_list: []
+    instrument_poll_minutes: 60
+    kline_intervals: ["1m"]
+    depth:
+      enabled: false
+      mode: top_n
+      top_n: 1
+      ranking: quote_volume
+      refresh_minutes: 60
+    funding_poll_minutes: 60
+    open_interest_poll_minutes: 60
+    positioning_poll_minutes: 60
+
+  coinm_futures:
+    enabled: false
+    rest_base_url: https://dapi.binance.com
+    ws_base_url: wss://dstream.binance.com
+    rest_weight_per_minute: 2000
+    symbol_universe: list
+    symbol_list: []
+    instrument_poll_minutes: 60
+    kline_intervals: ["1m"]
+    depth:
+      enabled: false
+      mode: top_n
+      top_n: 1
+      ranking: quote_volume
+      refresh_minutes: 60
+    funding_poll_minutes: 60
+    open_interest_poll_minutes: 60
+    positioning_poll_minutes: 60
+
+  options:
+    enabled: true
+    rest_base_url: https://eapi.binance.com
+    ws_base_url: wss://fstream.binancefuture.com/eoptions
+    rest_weight_per_minute: 400
+    symbol_universe: list
+    symbol_list: ["BTC-260828-65000-C", "BTC-260828-65000-P"]
+    instrument_poll_minutes: 60
+    kline_intervals: ["1m"]
+
+rate_limits:
+  ws_connections_per_5min: 150
+  max_streams_per_connection: 100

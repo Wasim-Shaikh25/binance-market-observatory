@@ -20,13 +20,13 @@ change (see `AGENTS.md`, "docs sync" rule).
                                         │
                                         ▼
                                   DB writer (single)
-                                        │
-                                        ▼
-                            SQLite (WAL mode) — the database
-                                        │
-                                        ▼
-                          Health / audit subsystem (reads DB,
-                          writes to health & system_events tables)
+                     ┌─────────────┼─────────────────┐
+                     ▼             ▼                 ▼
+              SQLite (WAL)   ClickHouse*      raw.ndjson.zst*
+              primary/compare  optional         optional archive
+
+\* Optional dual sinks via `sinks:` in config — enabled for comparison; SQLite
+  remains until a measured cutover.
 ```
 
 Each product connector is an **independent module**: it owns its own WebSocket/REST
@@ -133,7 +133,12 @@ not just the ones currently in the high-resolution set.
   connection pool.
 - Storage: `aiosqlite`, WAL mode, `synchronous=NORMAL`, single writer (`DBWriter`).
 - Config: YAML (`pyyaml`) for the capability registry (`config/settings.yaml`), loaded
-  into typed dataclasses in `src/config.py`.
+  into typed dataclasses in `src/config.py`. USDS-M WebSocket base URL must be
+  `wss://fstream.binancefuture.com` (not `fstream.binance.com`, which can silently
+  omit aggTrade/ticker/kline/markPrice/forceOrder while still delivering
+  trade+bookTicker — verified live 2026-08-27).
+- Validation/research outputs: `validation/{script,report}/` and
+  `research/{script,report}/` per `AGENTS.md` rule 8.
 - Tests: `pytest` + `pytest-asyncio`, plus a local protocol-faithful mock of Binance's
   REST/WebSocket API (`tests/mock_binance.py`) used because this project's development
   sandbox cannot reach Binance's real servers (see `STATUS.md`) -- a live run against
@@ -175,10 +180,12 @@ binance-market-observatory/
 │       ├── common.py            # shared parsers (spot/usdm/coinm wire shapes match)
 │       ├── market.py             # generic connector driving spot/usdm/coinm
 │       ├── spot.py, usdm.py, coinm.py  # per-product REST paths + futures flags
-│       └── options.py             # raw-fidelity-only connector (see its docstring)
+│       ├── options.py             # Options REST primary + WS best-effort
+│       └── system_status.py       # public /sapi/v1/system/status → exchange_status
 ├── config/
 │   └── settings.yaml       # the capability registry
 ├── data/                    # SQLite database lives here (gitignored)
+├── validation/              # validation script + report outputs
 └── tests/
     ├── mock_binance.py      # local Binance protocol stand-in
     ├── test_integration_spot.py   # full pipeline test against the mock
@@ -186,6 +193,12 @@ binance-market-observatory/
     └── test_*.py                   # unit tests (ratelimit, depth_sync, storage, parsers)
 ```
 
-Not yet built: a live 72-hour run against real Binance (blocked in this sandbox --
-see `STATUS.md`), and normalized tables for Options (raw-fidelity only until its wire
-format is confirmed against live docs).
+Normalized Options tables: `options_mark` (IV/greeks as TEXT), `options_index`.
+Options depth/OI reuse `depth_snapshots` / `open_interest` via REST polls.
+Exchange-wide: `exchange_status`. Provenance: `raw_events.source_type`
+(`websocket` | `rest_poll` | `rest_backfill` | `internal`).
+Gap-fill: `src/gap_fill.py` recovers public aggTrades/klines holes into the queue
+with `rest_backfill` (never overwrites live UNIQUE rows); jobs in `gap_fill_jobs`.
+Coverage: `symbol_coverage` snapshots + `coverage_history` open/closed DEPTH
+intervals with reasons. A literal 72-hour clean run is an operational step
+(see `STATUS.md`) — not a missing connector.

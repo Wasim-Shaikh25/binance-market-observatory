@@ -187,10 +187,13 @@ many WebSocket/REST connectors (one per product/data-class)
 ```
 
 SQLite with WAL and a single writer is the right starting point — simple, durable,
-zero infrastructure to operate. If volume outgrows it, the migration path is
-SQLite → benchmark → PostgreSQL/ClickHouse/Parquet, decided with data in hand, not
-speculated up front. Multiple concurrent SQLite writers are never introduced as a
-"solution" to a throughput problem; the queue + single-writer boundary is fixed.
+zero infrastructure to operate. Optional dual sinks (config `sinks:`) can also
+write the same envelopes to **ClickHouse** (hot/query) and a streaming
+**NDJSON+zstd** raw archive (evidence) while SQLite remains enabled for
+comparison. Migration off SQLite is decided only after measured comparison.
+If volume outgrows SQLite alone, the path is SQLite → dual-write benchmark →
+ClickHouse + raw archive (Parquet optional later). Multiple concurrent SQLite
+writers are never introduced; the queue + single-writer boundary is fixed.
 
 ## 7. Capability registry
 
@@ -239,3 +242,15 @@ already running clean.
 See `SCOPE.md` for the enforced list. In one line: this project stops at "the market's
 public data is durably and verifiably in the database." Anything that interprets,
 predicts, or acts on that data is a separate, later project consuming this one's output.
+
+## 11. Accepted limitations (do not chase)
+
+**The absence of a stable public machine-readable Binance announcements feed is an
+accepted limitation and does not constitute a failure of the Market Observatory.
+Options WebSocket availability is environment-dependent; where the public REST
+interface provides the required information, REST collection is acceptable and the
+project must not depend on Options WebSocket availability.**
+
+Operational corollary: after gap-fill + coverage_history land and a multi-product
+validation passes, the next step is a continuous clean run and freeze — not more
+collector features for their own sake.

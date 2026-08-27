@@ -109,3 +109,25 @@ def test_parse_positioning_entry_unknown_metric_has_no_value():
     parsed = common.parse_positioning_entry("somethingNew", {"timestamp": 1})
     assert parsed["value"] is None
     assert parsed["observation_time"] == 1
+
+
+def test_coinm_pair_from_symbol_strips_perp_and_dated_suffix():
+    assert common.coinm_pair_from_symbol("BTCUSD_PERP") == "BTCUSD"
+    assert common.coinm_pair_from_symbol("ethusd_perp") == "ETHUSD"
+    assert common.coinm_pair_from_symbol("BTCUSD_250926") == "BTCUSD"
+    assert common.coinm_pair_from_symbol("BTCUSD") == "BTCUSD"
+
+
+def test_positioning_rows_splits_coinm_taker_buy_sell_vol():
+    entry = {
+        "takerBuyVol": "24667",
+        "takerSellVol": "20161",
+        "pair": "BTCUSD",
+        "timestamp": 1787819100000,
+    }
+    rows = common.positioning_rows("takerBuySellVol", entry)
+    assert [(r["metric"], r["value"]) for r in rows] == [
+        ("takerBuyVol", "24667"),
+        ("takerSellVol", "20161"),
+    ]
+    assert all(r["observation_time"] == 1787819100000 for r in rows)

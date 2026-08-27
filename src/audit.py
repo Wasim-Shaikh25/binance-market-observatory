@@ -46,7 +46,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config/settings.yaml")
     parser.add_argument("--db", default=None, help="Explicit database file (default: most recent run)")
-    parser.add_argument("--out", default="audit_report.md")
+    parser.add_argument(
+        "--out",
+        default="validation/report/audit_report.md",
+        help="Report path (default: validation/report/ per AGENTS.md rule 8)",
+    )
     args = parser.parse_args()
     asyncio.run(run(args.config, args.out, args.db))
 

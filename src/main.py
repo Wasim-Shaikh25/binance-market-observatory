@@ -24,11 +24,15 @@ from datetime import datetime, timezone
 
 import aiohttp
 
-from .config import load_settings, resolve_db_path
+from .config import load_settings, resolve_db_path, resolve_path_template
 from .connectors import coinm, options, spot, usdm
 from .connectors.market import ConnectorContext
+from .connectors.system_status import system_status_loop
 from .binance_client import RestClient
+from .clickhouse_sink import ClickHouseSink
+from .gap_fill import gap_fill_loop
 from .ratelimit import RestWeightLimiter, WsConnectionLimiter
+from .raw_archive import RawArchiveWriter
 from .storage import DBWriter, open_db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -53,7 +57,20 @@ async def run(config_path: str) -> None:
     logger.info("Run %s starting. Writing to database: %s", run_id, db_path)
     conn = await open_db(db_path)
     queue: asyncio.Queue = asyncio.Queue(maxsize=10000)
-    writer = DBWriter(conn, queue)
+
+    raw_archive = None
+    if settings.raw_archive.enabled:
+        archive_path = resolve_path_template(settings.raw_archive.path, run_id)
+        raw_archive = RawArchiveWriter(archive_path, rotate=settings.raw_archive.rotate)
+        logger.info("Raw archive enabled: %s (rotate=%s)", archive_path, settings.raw_archive.rotate)
+
+    clickhouse = None
+    if settings.clickhouse.enabled:
+        ch_db = resolve_path_template(settings.clickhouse.database, run_id)
+        clickhouse = ClickHouseSink(settings.clickhouse, database=ch_db)
+        logger.info("ClickHouse sink enabled: %s db=%s", settings.clickhouse.url, ch_db)
+
+    writer = DBWriter(conn, queue, raw_archive=raw_archive, clickhouse=clickhouse)
     writer_task = asyncio.create_task(writer.run())
 
     try:
@@ -77,6 +94,27 @@ async def run(config_path: str) -> None:
                 runner = RUNNERS[key]
                 logger.info("Starting connector: %s", key)
                 product_tasks.append(asyncio.create_task(runner(cfg, ctx), name=key))
+                if key in ("spot", "usdm_futures", "coinm_futures"):
+                    product_tasks.append(
+                        asyncio.create_task(gap_fill_loop(cfg, ctx, poll_minutes=5), name=f"gap_fill_{key}")
+                    )
+
+            # Public exchange status (Spot API host); always on when any product runs.
+            status_rest = RestClient(
+                session,
+                "https://api.binance.com",
+                RestWeightLimiter(600),
+            )
+            # Reuse first product's queue/db via a lightweight context
+            status_ctx = ConnectorContext(
+                queue=queue,
+                session=session,
+                rest=status_rest,
+                ws_limiter=WsConnectionLimiter(settings.ws_connections_per_5min),
+                db=conn,
+                max_streams_per_connection=settings.max_streams_per_connection,
+            )
+            product_tasks.append(asyncio.create_task(system_status_loop(status_rest, status_ctx, poll_minutes=5), name="exchange_status"))
 
             stop = asyncio.Event()
             loop = asyncio.get_running_loop()

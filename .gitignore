@@ -12,3 +12,11 @@ venv/
 .mypy_cache/
 .ruff_cache/
 audit_report.md
+
+# Local capture / benchmark binaries (keep markdown reports)
+data/
+research/report/**/artifacts/
+*.ndjson
+*.ndjson.gz
+*.ndjson.zst
+*.parquet

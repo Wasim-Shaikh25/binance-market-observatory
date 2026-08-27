@@ -13,7 +13,7 @@ import os
 
 import aiosqlite
 
-from .models import Envelope, taker_side
+from .models import Envelope, resolve_source_type, taker_side
 from .schema import init_schema
 
 logger = logging.getLogger(__name__)
@@ -51,13 +51,14 @@ async def log_system_event(
 async def _write_raw(conn: aiosqlite.Connection, env: Envelope) -> None:
     await conn.execute(
         "INSERT INTO raw_events "
-        "(exchange, product, symbol, stream_name, source_endpoint, schema_version, "
-        "observed_at, payload_json) VALUES ('binance', ?, ?, ?, ?, ?, ?, ?)",
+        "(exchange, product, symbol, stream_name, source_endpoint, source_type, "
+        "schema_version, observed_at, payload_json) VALUES ('binance', ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             env.product,
             env.symbol,
             env.stream_name,
             env.source_endpoint,
+            resolve_source_type(env),
             env.schema_version,
             env.observed_at,
             json.dumps(env.payload, separators=(",", ":")),
@@ -167,6 +168,35 @@ async def _write_ticker_24h(conn: aiosqlite.Connection, env: Envelope) -> None:
 
 async def _write_candle(conn: aiosqlite.Connection, env: Envelope) -> None:
     p = env.payload
+    # Live WS may REPLACE in-progress bars. Backfill must NEVER overwrite an
+    # existing live observation for the same (symbol, interval, open_time).
+    if resolve_source_type(env) == "rest_backfill":
+        await conn.execute(
+            "INSERT OR IGNORE INTO candles "
+            "(exchange, product, symbol, interval, open_time, close_time, open, high, "
+            "low, close, base_volume, quote_volume, trade_count, taker_buy_base_volume, "
+            "taker_buy_quote_volume, is_final, observed_at) "
+            "VALUES ('binance', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                env.product,
+                env.symbol,
+                p["interval"],
+                p["open_time"],
+                p["close_time"],
+                p["open"],
+                p["high"],
+                p["low"],
+                p["close"],
+                p["base_volume"],
+                p["quote_volume"],
+                p.get("trade_count"),
+                p.get("taker_buy_base_volume"),
+                p.get("taker_buy_quote_volume"),
+                int(bool(p.get("is_final", False))),
+                env.observed_at,
+            ),
+        )
+        return
     await conn.execute(
         "INSERT OR REPLACE INTO candles "
         "(exchange, product, symbol, interval, open_time, close_time, open, high, "
@@ -311,6 +341,64 @@ async def _write_symbol_coverage(conn: aiosqlite.Connection, env: Envelope) -> N
     )
 
 
+async def _write_coverage_history(conn: aiosqlite.Connection, env: Envelope) -> None:
+    p = env.payload
+    action = p.get("action", "open")
+    if action == "close":
+        await conn.execute(
+            """
+            UPDATE coverage_history
+            SET ended_at = ?, close_reason = ?
+            WHERE product = ? AND symbol = ? AND feed = ? AND ended_at IS NULL
+            """,
+            (
+                p.get("ended_at", env.observed_at),
+                p.get("close_reason") or p.get("reason"),
+                env.product,
+                env.symbol,
+                p.get("feed", "DEPTH"),
+            ),
+        )
+        return
+    await conn.execute(
+        """
+        INSERT INTO coverage_history
+        (product, symbol, feed, tier, started_at, ended_at, reason, close_reason)
+        VALUES (?, ?, ?, ?, ?, NULL, ?, NULL)
+        """,
+        (
+            env.product,
+            env.symbol,
+            p.get("feed", "DEPTH"),
+            p["tier"],
+            p.get("started_at", env.observed_at),
+            p["reason"],
+        ),
+    )
+
+
+async def _write_gap_fill_job(conn: aiosqlite.Connection, env: Envelope) -> None:
+    p = env.payload
+    await conn.execute(
+        """
+        INSERT INTO gap_fill_jobs
+        (product, symbol, feed, gap_start, gap_end, status, rows_inserted, detail, observed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            env.product,
+            env.symbol,
+            p["feed"],
+            p.get("gap_start"),
+            p.get("gap_end"),
+            p["status"],
+            int(p.get("rows_inserted") or 0),
+            p.get("detail"),
+            env.observed_at,
+        ),
+    )
+
+
 async def _write_liquidation(conn: aiosqlite.Connection, env: Envelope) -> None:
     p = env.payload
     await conn.execute(
@@ -352,6 +440,53 @@ async def _write_mark_price(conn: aiosqlite.Connection, env: Envelope) -> None:
     )
 
 
+async def _write_exchange_status(conn: aiosqlite.Connection, env: Envelope) -> None:
+    p = env.payload
+    await conn.execute(
+        "INSERT INTO exchange_status (status_code, msg, observed_at, payload_json) VALUES (?, ?, ?, ?)",
+        (p.get("status"), p.get("msg"), env.observed_at, json.dumps(p.get("raw", p), separators=(",", ":"))),
+    )
+
+
+async def _write_options_mark(conn: aiosqlite.Connection, env: Envelope) -> None:
+    p = env.payload
+    await conn.execute(
+        "INSERT INTO options_mark (exchange, product, symbol, mark_price, mark_iv, bid_iv, ask_iv, "
+        "delta, gamma, theta, vega, observed_at, payload_json) "
+        "VALUES ('binance', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            env.product,
+            env.symbol,
+            p.get("mark_price"),
+            p.get("mark_iv"),
+            p.get("bid_iv"),
+            p.get("ask_iv"),
+            p.get("delta"),
+            p.get("gamma"),
+            p.get("theta"),
+            p.get("vega"),
+            env.observed_at,
+            json.dumps(p.get("raw", {}), separators=(",", ":")),
+        ),
+    )
+
+
+async def _write_options_index(conn: aiosqlite.Connection, env: Envelope) -> None:
+    p = env.payload
+    await conn.execute(
+        "INSERT INTO options_index (exchange, product, underlying, index_price, observation_time, "
+        "observed_at, payload_json) VALUES ('binance', ?, ?, ?, ?, ?, ?)",
+        (
+            env.product,
+            p["underlying"],
+            p["index_price"],
+            p.get("observation_time"),
+            env.observed_at,
+            json.dumps(p.get("raw", {}), separators=(",", ":")),
+        ),
+    )
+
+
 _NORMALIZERS = {
     "trade": _write_trade,
     "agg_trade": _write_agg_trade,
@@ -367,16 +502,33 @@ _NORMALIZERS = {
     "mark_price": _write_mark_price,
     "futures_positioning": _write_futures_positioning,
     "symbol_coverage": _write_symbol_coverage,
+    "coverage_history": _write_coverage_history,
+    "gap_fill_job": _write_gap_fill_job,
+    "exchange_status": _write_exchange_status,
+    "options_mark": _write_options_mark,
+    "options_index": _write_options_index,
 }
 
 
 class DBWriter:
-    """Drains an asyncio.Queue of Envelopes and is the sole writer to SQLite."""
+    """Drains an asyncio.Queue of Envelopes and is the sole writer to SQLite.
 
-    def __init__(self, conn: aiosqlite.Connection, queue: "asyncio.Queue[Envelope]"):
+    Optional dual sinks (raw zstd archive, ClickHouse) run best-effort after
+    SQLite commit so a sink failure never rolls back durable SQLite evidence.
+    """
+
+    def __init__(
+        self,
+        conn: aiosqlite.Connection,
+        queue: "asyncio.Queue[Envelope]",
+        raw_archive=None,
+        clickhouse=None,
+    ):
         self._conn = conn
         self._queue = queue
         self._stop = False
+        self._raw_archive = raw_archive
+        self._clickhouse = clickhouse
 
     async def run(self) -> None:
         while not self._stop:
@@ -400,8 +552,44 @@ class DBWriter:
                     product=env.product,
                     symbol=env.symbol,
                 )
+            else:
+                if self._raw_archive is not None:
+                    try:
+                        self._raw_archive.append(env)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.exception("raw archive write failed")
+                        await log_system_event(
+                            self._conn,
+                            "archive_write_failure",
+                            detail=f"{type(exc).__name__}: {exc}",
+                            product=env.product,
+                            symbol=env.symbol,
+                        )
+                if self._clickhouse is not None:
+                    try:
+                        await self._clickhouse.enqueue(env)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.exception("clickhouse write failed")
+                        await log_system_event(
+                            self._conn,
+                            "clickhouse_write_failure",
+                            detail=f"{type(exc).__name__}: {exc}",
+                            product=env.product,
+                            symbol=env.symbol,
+                        )
             finally:
                 self._queue.task_done()
+
+        if self._clickhouse is not None:
+            try:
+                await self._clickhouse.close()
+            except Exception:  # noqa: BLE001
+                logger.exception("clickhouse flush/close failed")
+        if self._raw_archive is not None:
+            try:
+                self._raw_archive.close()
+            except Exception:  # noqa: BLE001
+                logger.exception("raw archive close failed")
 
     def stop(self) -> None:
         self._stop = True

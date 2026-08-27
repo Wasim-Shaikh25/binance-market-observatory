@@ -45,6 +45,9 @@ class ProductPaths:
     mark_price_suffix: str | None = None  # e.g. "@markPrice@1s"
     positioning_endpoints: tuple[str, ...] = ()  # metric names, e.g. "globalLongShortAccountRatio"
     positioning_path_prefix: str = "/futures/data/"  # override per-product if the real path differs
+    # USDS-M takes `symbol=BTCUSDT`; COIN-M takes `pair=BTCUSD` (not the contract
+    # symbol). Verified live 2026-08-27 -- `symbol=` on dapi returns HTTP 400.
+    positioning_query_param: str = "symbol"
 
 
 @dataclass
@@ -103,10 +106,11 @@ async def handle_broad_message(cfg: ProductConfig, ctx: ConnectorContext, msg: d
     stream = msg.get("stream", "")
     data = msg.get("data", {})
     symbol = data.get("s")
-    if stream.endswith("@trade"):
-        parsed, kind = common.parse_trade(data), "trade"
-    elif stream.endswith("@aggTrade"):
+    # More-specific suffixes first (@aggTrade before @trade, @bookTicker before @ticker).
+    if stream.endswith("@aggTrade"):
         parsed, kind = common.parse_agg_trade(data), "agg_trade"
+    elif stream.endswith("@trade"):
+        parsed, kind = common.parse_trade(data), "trade"
     elif stream.endswith("@bookTicker"):
         parsed, kind = common.parse_book_ticker(data), "book_ticker"
     elif stream.endswith("@ticker"):
@@ -266,37 +270,65 @@ class DepthConnectionGroup:
         tracker = self.trackers.get(symbol)
         if tracker is None:
             return
+        # While a REST snapshot is in flight, only buffer — applying against
+        # the stale book id causes a resync storm (every 100ms event fails the
+        # pu/U check and re-logs depth_resync without ever bridging).
+        if symbol in self._resyncing:
+            tracker.buffer(parsed)
+            return
+
         result = tracker.apply_update(parsed)
         if result == "resync_needed":
-            await log_system_event(self.ctx.db, "depth_resync", detail="update-id gap detected", product=self.cfg.tag, symbol=symbol.upper())
-        if result in ("buffered", "resync_needed") and symbol not in self._resyncing:
+            await log_system_event(
+                self.ctx.db, "depth_resync", detail="update-id gap detected", product=self.cfg.tag, symbol=symbol.upper()
+            )
+            tracker.reset()
+            tracker.buffer(parsed)
+            self._resyncing.add(symbol)
+            asyncio.create_task(self._resync(symbol, tracker))
+        elif result == "buffered":
             self._resyncing.add(symbol)
             asyncio.create_task(self._resync(symbol, tracker))
 
     async def _resync(self, symbol: str, tracker: DepthSyncTracker) -> None:
         try:
-            data = await self.ctx.rest.get_json(
-                self.paths.depth_path, weight=50, params={"symbol": symbol.upper(), "limit": 1000}
-            )
-            snap = common.parse_depth_snapshot(data)
-            tracker.apply_snapshot(snap["last_update_id"], snap["bids"], snap["asks"])
-            await self.ctx.queue.put(
-                Envelope(
-                    product=self.cfg.tag,
-                    stream_name=f"{symbol}@depth_snapshot",
-                    source_endpoint=self.cfg.rest_base_url + self.paths.depth_path,
-                    kind="depth_snapshot",
-                    payload=snap,
-                    symbol=symbol.upper(),
+            for attempt in range(5):
+                try:
+                    data = await self.ctx.rest.get_json(
+                        self.paths.depth_path, weight=50, params={"symbol": symbol.upper(), "limit": 1000}
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("depth snapshot fetch failed for %s", symbol)
+                    await log_system_event(
+                        self.ctx.db,
+                        "rest_failure",
+                        detail=f"depth snapshot {symbol}: {exc}",
+                        product=self.cfg.tag,
+                        symbol=symbol.upper(),
+                    )
+                    await asyncio.sleep(0.2 * (attempt + 1))
+                    continue
+                snap = common.parse_depth_snapshot(data)
+                ok = tracker.apply_snapshot(snap["last_update_id"], snap["bids"], snap["asks"])
+                await self.ctx.queue.put(
+                    Envelope(
+                        product=self.cfg.tag,
+                        stream_name=f"{symbol}@depth_snapshot",
+                        source_endpoint=self.cfg.rest_base_url + self.paths.depth_path,
+                        kind="depth_snapshot",
+                        payload=snap,
+                        symbol=symbol.upper(),
+                    )
                 )
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("depth snapshot fetch failed for %s", symbol)
-            await log_system_event(
-                self.ctx.db, "rest_failure", detail=f"depth snapshot {symbol}: {exc}", product=self.cfg.tag, symbol=symbol.upper()
-            )
+                if ok:
+                    return
+                await asyncio.sleep(0.05 * (attempt + 1))
         finally:
             self._resyncing.discard(symbol)
+            # If we still aren't synced, the next buffered/gap event will
+            # start another resync; avoid leaving a half-applied book id.
+            if not tracker.synced and tracker.last_update_id is not None and not tracker._buffer:
+                tracker.reset()
 
 
 async def _record_coverage_tiers(cfg: ProductConfig, ctx: ConnectorContext, universe: list[str], high_res: set[str]) -> None:
@@ -314,6 +346,105 @@ async def _record_coverage_tiers(cfg: ProductConfig, ctx: ConnectorContext, univ
                 kind="symbol_coverage",
                 payload={"tier": tier},
                 symbol=symbol.upper(),
+            )
+        )
+    await _sync_coverage_history(cfg, ctx, universe, high_res)
+
+
+async def _sync_coverage_history(
+    cfg: ProductConfig, ctx: ConnectorContext, universe: list[str], high_res: set[str]
+) -> None:
+    """Maintain open coverage_history intervals with explicit change reasons."""
+    from ..models import now_iso
+
+    now = now_iso()
+    cur = await ctx.db.execute(
+        """
+        SELECT symbol, tier FROM coverage_history
+        WHERE product = ? AND feed = 'DEPTH' AND ended_at IS NULL
+        """,
+        (cfg.tag,),
+    )
+    open_tiers = {row[0]: row[1] for row in await cur.fetchall()}
+    universe_u = [s.upper() for s in universe]
+    universe_set = set(universe_u)
+    high_u = {s.upper() for s in high_res}
+
+    for symbol in universe_u:
+        desired = "HIGH_RESOLUTION" if symbol in high_u else "BROAD"
+        current = open_tiers.get(symbol)
+        if current == desired:
+            continue
+        if current is None:
+            reason = "initial_assignment"
+        elif desired == "HIGH_RESOLUTION":
+            reason = "entered_top_n"
+            await ctx.queue.put(
+                Envelope(
+                    product=cfg.tag,
+                    stream_name="coverage_history",
+                    source_endpoint="internal",
+                    kind="coverage_history",
+                    payload={
+                        "action": "close",
+                        "feed": "DEPTH",
+                        "ended_at": now,
+                        "close_reason": "entered_top_n",
+                    },
+                    symbol=symbol,
+                )
+            )
+        else:
+            reason = "left_top_n"
+            await ctx.queue.put(
+                Envelope(
+                    product=cfg.tag,
+                    stream_name="coverage_history",
+                    source_endpoint="internal",
+                    kind="coverage_history",
+                    payload={
+                        "action": "close",
+                        "feed": "DEPTH",
+                        "ended_at": now,
+                        "close_reason": "left_top_n",
+                    },
+                    symbol=symbol,
+                )
+            )
+        await ctx.queue.put(
+            Envelope(
+                product=cfg.tag,
+                stream_name="coverage_history",
+                source_endpoint="internal",
+                kind="coverage_history",
+                payload={
+                    "action": "open",
+                    "feed": "DEPTH",
+                    "tier": desired,
+                    "started_at": now,
+                    "reason": reason,
+                },
+                symbol=symbol,
+            )
+        )
+
+    # Symbols that left the universe entirely: close open rows.
+    for symbol, _tier in open_tiers.items():
+        if symbol in universe_set:
+            continue
+        await ctx.queue.put(
+            Envelope(
+                product=cfg.tag,
+                stream_name="coverage_history",
+                source_endpoint="internal",
+                kind="coverage_history",
+                payload={
+                    "action": "close",
+                    "feed": "DEPTH",
+                    "ended_at": now,
+                    "close_reason": "left_universe",
+                },
+                symbol=symbol,
             )
         )
 
@@ -384,29 +515,49 @@ async def positioning_loop(cfg: ProductConfig, ctx: ConnectorContext, paths: Pro
         return
     while True:
         symbols = symbols_provider()
+        # COIN-M endpoints key on pair (BTCUSD), not contract symbol (BTCUSD_PERP).
+        # Deduplicate so BTCUSD_PERP + BTCUSD_250926 don't double-hit the same pair.
+        query_keys: list[tuple[str, str]] = []
+        seen: set[str] = set()
         for symbol in symbols:
+            key = (
+                common.coinm_pair_from_symbol(symbol)
+                if paths.positioning_query_param == "pair"
+                else symbol.upper()
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            query_keys.append((symbol.upper(), key))
+        for symbol, query_value in query_keys:
             for metric in paths.positioning_endpoints:
                 endpoint = f"{paths.positioning_path_prefix}{metric}"
                 try:
-                    data = await ctx.rest.get_json(endpoint, weight=1, params={"symbol": symbol.upper(), "period": "5m", "limit": 1})
+                    data = await ctx.rest.get_json(
+                        endpoint,
+                        weight=1,
+                        params={paths.positioning_query_param: query_value, "period": "5m", "limit": 1},
+                    )
                     if not data:
                         continue
                     entry = data[-1]
-                    parsed = common.parse_positioning_entry(metric, entry)
-                    await ctx.queue.put(
-                        Envelope(
-                            product=cfg.tag,
-                            stream_name=metric,
-                            source_endpoint=cfg.rest_base_url + endpoint,
-                            kind="futures_positioning",
-                            payload={"metric": metric, "value": parsed["value"], "observation_time": parsed["observation_time"], "raw": entry},
-                            symbol=symbol.upper(),
+                    for row in common.positioning_rows(metric, entry):
+                        if row["value"] is None:
+                            continue
+                        await ctx.queue.put(
+                            Envelope(
+                                product=cfg.tag,
+                                stream_name=metric,
+                                source_endpoint=cfg.rest_base_url + endpoint,
+                                kind="futures_positioning",
+                                payload=row,
+                                symbol=symbol,
+                            )
                         )
-                    )
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("positioning poll failed for %s/%s", symbol, metric)
                     await log_system_event(
-                        ctx.db, "rest_failure", detail=f"positioning {metric} {symbol}: {exc}", product=cfg.tag, symbol=symbol.upper()
+                        ctx.db, "rest_failure", detail=f"positioning {metric} {symbol}: {exc}", product=cfg.tag, symbol=symbol
                     )
         await asyncio.sleep(max(cfg.positioning_poll_minutes, 1) * 60)
 

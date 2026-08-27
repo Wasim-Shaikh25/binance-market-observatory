@@ -10,7 +10,7 @@ checks are supported here.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 
@@ -37,12 +37,14 @@ class DepthSyncTracker:
         been applied (or while resyncing)."""
         self._buffer.append(event)
 
-    def apply_snapshot(self, last_update_id: int, bids: list[list[str]], asks: list[list[str]]) -> None:
+    def apply_snapshot(self, last_update_id: int, bids: list[list[str]], asks: list[list[str]]) -> bool:
+        """Apply a REST snapshot and replay buffered diffs. Returns True if
+        synced (or waiting cleanly for the next live event); False if the
+        snapshot could not be bridged and a fresh fetch is required."""
         self.last_update_id = last_update_id
         self.bids = {p: q for p, q in bids if float(q) > 0}
         self.asks = {p: q for p, q in asks if float(q) > 0}
         self.synced = False
-        # Replay buffered events that are still relevant to this snapshot.
         pending = [e for e in self._buffer if e["final_update_id"] > last_update_id]
         self._buffer.clear()
         first = True
@@ -50,15 +52,25 @@ class DepthSyncTracker:
             skip_check = first
             if first:
                 first = False
+                # Binance: first processed event needs U <= lastUpdateId+1 <= u.
                 if not (event["first_update_id"] <= last_update_id + 1 <= event["final_update_id"]):
-                    # Snapshot is already stale relative to the buffered stream;
-                    # caller must fetch a fresh snapshot.
-                    self.synced = False
-                    return
+                    # Snapshot is stale vs the buffered stream — restore events
+                    # for a retry and drop the broken book state.
+                    self._buffer = pending
+                    self.last_update_id = None
+                    self.bids = {}
+                    self.asks = {}
+                    return False
             result = self.apply_update(event, _skip_pu_check_once=skip_check)
             if result != "ok":
-                return
+                idx = pending.index(event)
+                self._buffer = pending[idx:]
+                self.last_update_id = None
+                self.bids = {}
+                self.asks = {}
+                return False
         self.synced = True
+        return True
 
     def apply_update(self, event: dict, _skip_pu_check_once: bool = False) -> str:
         """Returns 'ok', 'buffered' (no snapshot yet), or 'resync_needed'."""

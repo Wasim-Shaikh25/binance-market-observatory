@@ -25,7 +25,7 @@ products:
     symbol_universe: all
     symbol_list: []
     instrument_poll_minutes: 60
-    kline_intervals: ["1m", "5m", "1h"]
+    kline_intervals: ["1m", "5m", "15m", "1h", "4h", "1d"]
     depth:
       enabled: true
       mode: top_n
@@ -36,12 +36,13 @@ products:
   usdm_futures:
     enabled: true
     rest_base_url: https://fapi.binance.com
-    ws_base_url: wss://fstream.binance.com
+    # fstream.binance.com can silently omit aggTrade/ticker/kline/markPrice/forceOrder
+    ws_base_url: wss://fstream.binancefuture.com
     rest_weight_per_minute: 2000
     symbol_universe: all
     symbol_list: []
     instrument_poll_minutes: 60
-    kline_intervals: ["1m", "5m", "1h"]
+    kline_intervals: ["1m", "5m", "15m", "1h", "4h", "1d"]
     depth:
       enabled: true
       mode: top_n
@@ -63,7 +64,7 @@ products:
     symbol_universe: all
     symbol_list: []
     instrument_poll_minutes: 60
-    kline_intervals: ["1m", "5m", "1h"]
+    kline_intervals: ["1m", "5m", "15m", "1h", "4h", "1d"]
     depth:
       enabled: true
       mode: top_n
@@ -77,16 +78,15 @@ products:
     # are unverified against live docs from this sandbox -- see connectors/usdm.py.
     positioning_poll_minutes: 15
 
-  # Disabled by default -- see connectors/options.py docstring: the public
-  # wire format could not be verified against live Binance docs from this
-  # sandbox (network access blocked). Confirm current endpoints/streams and
-  # add normalizers before enabling in a production run.
+  # Options: REST mark/ticker/trades/index verified live 2026-08-27. WS host
+  # nbstream returns 404 here; fstream.binancefuture.com/eoptions handshakes but
+  # may deliver no frames — REST is primary. Enable when you want Options data.
   options:
     enabled: false
     rest_base_url: https://eapi.binance.com
-    ws_base_url: wss://nbstream.binance.com/eoptions
+    ws_base_url: wss://fstream.binancefuture.com/eoptions
     rest_weight_per_minute: 400
-    symbol_universe: all
+    symbol_universe: list
     symbol_list: []
     instrument_poll_minutes: 60
     kline_intervals: ["1m", "5m"]
@@ -94,3 +94,18 @@ products:
 rate_limits:
   ws_connections_per_5min: 150
   max_streams_per_connection: 100
+
+# Dual sinks (SQLite stays primary until comparison is done).
+# Start ClickHouse: docker start bmo-clickhouse  (default/bench @ :8123)
+sinks:
+  clickhouse:
+    enabled: false
+    url: http://127.0.0.1:8123
+    user: default
+    password: bench
+    database: bmo_{run_id}
+    batch_size: 500
+  raw_archive:
+    enabled: false
+    path: data/archive_{run_id}/raw.ndjson.zst
+    rotate: none  # none = one file per run; hour = rotate each UTC hour
