@@ -1,0 +1,83 @@
+# Capability registry (docs/THESIS.md #7). Changing what gets collected,
+# which symbols, or the rate-limit budget is a config edit here, not a code
+# change -- when Binance changes its API surface, fix it here first.
+#
+# Rate-limit numbers below are deliberately conservative fractions of
+# Binance's long-documented public defaults. RestWeightLimiter self-corrects
+# against the exchange's own reported used-weight header, so drift in these
+# defaults degrades gracefully rather than causing a ban -- but re-verify
+# them against Binance's current docs periodically regardless.
+
+database:
+  path: data/market.db
+
+products:
+  spot:
+    enabled: true
+    rest_base_url: https://api.binance.com
+    ws_base_url: wss://stream.binance.com:9443
+    rest_weight_per_minute: 1200
+    symbol_universe: all
+    symbol_list: []
+    instrument_poll_minutes: 60
+    kline_intervals: ["1m", "5m", "1h"]
+    depth:
+      enabled: true
+      mode: top_n
+      top_n: 50
+      ranking: quote_volume
+      refresh_minutes: 15
+
+  usdm_futures:
+    enabled: true
+    rest_base_url: https://fapi.binance.com
+    ws_base_url: wss://fstream.binance.com
+    rest_weight_per_minute: 2000
+    symbol_universe: all
+    symbol_list: []
+    instrument_poll_minutes: 60
+    kline_intervals: ["1m", "5m", "1h"]
+    depth:
+      enabled: true
+      mode: top_n
+      top_n: 30
+      ranking: quote_volume
+      refresh_minutes: 15
+    funding_poll_minutes: 5
+    open_interest_poll_minutes: 5
+
+  coinm_futures:
+    enabled: true
+    rest_base_url: https://dapi.binance.com
+    ws_base_url: wss://dstream.binance.com
+    rest_weight_per_minute: 2000
+    symbol_universe: all
+    symbol_list: []
+    instrument_poll_minutes: 60
+    kline_intervals: ["1m", "5m", "1h"]
+    depth:
+      enabled: true
+      mode: top_n
+      top_n: 20
+      ranking: quote_volume
+      refresh_minutes: 15
+    funding_poll_minutes: 5
+    open_interest_poll_minutes: 5
+
+  # Disabled by default -- see connectors/options.py docstring: the public
+  # wire format could not be verified against live Binance docs from this
+  # sandbox (network access blocked). Confirm current endpoints/streams and
+  # add normalizers before enabling in a production run.
+  options:
+    enabled: false
+    rest_base_url: https://eapi.binance.com
+    ws_base_url: wss://nbstream.binance.com/eoptions
+    rest_weight_per_minute: 400
+    symbol_universe: all
+    symbol_list: []
+    instrument_poll_minutes: 60
+    kline_intervals: ["1m", "5m"]
+
+rate_limits:
+  ws_connections_per_5min: 150
+  max_streams_per_connection: 100

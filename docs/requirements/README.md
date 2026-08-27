@@ -27,6 +27,7 @@ how-to.
 | Folder | Status | Summary |
 |---|---|---|
 | [`2026-08-27-repo-scaffold-and-governance`](2026-08-27-repo-scaffold-and-governance/) | ✅ Done | Documentation/governance scaffold: thesis, scope, architecture, AGENTS.md, changelog/status, requirements workflow itself |
-| [`2026-08-27-phase1-spot-collector`](2026-08-27-phase1-spot-collector/) | 🔲 Not started | Phase 1 implementation: Spot instruments/margin metadata, trades, aggTrades, bookTicker, ticker, candles, depth, health/audit |
+| [`2026-08-27-phase1-spot-collector`](2026-08-27-phase1-spot-collector/) | 🟡 Implemented, live run pending | Spot instruments/margin metadata, trades, aggTrades, bookTicker, ticker, candles, depth sync/resync, health/audit, rate limiting -- built and tested against a local mock (real Binance unreachable from this sandbox); a live run is the one remaining acceptance criterion |
+| [`2026-08-27-futures-and-options-collectors`](2026-08-27-futures-and-options-collectors/) | 🟡 Implemented, live run pending | USDS-M + COIN-M futures (funding, open interest, liquidations, mark price) built on Phase 1's shared framework; Options connector implemented raw-fidelity-only (disabled by default) pending live wire-format verification |
 
 Update this table whenever a folder is added or its status changes.

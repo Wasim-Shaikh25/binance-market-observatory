@@ -19,10 +19,22 @@ for the full reasoning and `docs/SCOPE.md` for the enforced boundary.
 
 ## Current status
 
-Pre-implementation — the documentation/governance scaffold is in place; no collector
-code exists yet. See `STATUS.md` for details and `docs/requirements/2026-08-27-phase1-spot-collector/`
-for the next unit of work (the Spot collector, Phase 1 of the build order in
-`docs/THESIS.md` §9).
+All four products are implemented (`src/`) and tested end-to-end against a local mock
+Binance server (35 tests, `tests/`) — see `STATUS.md` for the full picture. **Not yet
+run against real Binance**: this project's development sandbox cannot reach Binance's
+servers, so a live run from a machine with normal network access is the one remaining
+step before the collector is considered done. See
+`docs/requirements/2026-08-27-phase1-spot-collector/` and
+`docs/requirements/2026-08-27-futures-and-options-collectors/` for details.
+
+### Running it
+
+```
+pip install -r requirements.txt
+python -m src.main                 # starts collecting into data/market.db
+python -m src.audit                # generates docs/THESIS.md #8's correctness audit report
+python -m pytest                   # 35 tests, no network required (uses a local mock)
+```
 
 ## Working in this repo
 

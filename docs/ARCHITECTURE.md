@@ -100,20 +100,21 @@ See `THESIS.md` §5.4 for the full diagram and reasoning. Implementation note: t
 per-symbol state (each symbol being depth-tracked has its own snapshot/update-ID/local
 book state), not a single global state machine.
 
-## 6. Tech stack (default, not yet locked by an implementation requirement)
+## 6. Tech stack (locked, as of the Phase 1 implementation)
 
-- Language: Python 3.11+ (fits the async WebSocket + SQLite + exact-decimal needs well;
-  no framework decision has been forced yet beyond this).
-- Networking: async WebSocket client + REST client (library choice deferred to the
-  Phase 1 design doc).
-- Storage: `sqlite3`/`aiosqlite`, WAL mode.
-- Config: YAML for the capability registry and per-connector settings.
+- Language: Python 3.11+.
+- Networking: `aiohttp` for both REST (`RestClient`) and WebSocket (`ws_messages`) --
+  one dependency covers both, and its `ClientSession` gives every connector a shared
+  connection pool.
+- Storage: `aiosqlite`, WAL mode, `synchronous=NORMAL`, single writer (`DBWriter`).
+- Config: YAML (`pyyaml`) for the capability registry (`config/settings.yaml`), loaded
+  into typed dataclasses in `src/config.py`.
+- Tests: `pytest` + `pytest-asyncio`, plus a local protocol-faithful mock of Binance's
+  REST/WebSocket API (`tests/mock_binance.py`) used because this project's development
+  sandbox cannot reach Binance's real servers (see `STATUS.md`) -- a live run against
+  Binance is still required before any phase is considered done.
 
-This section will be superseded by whatever the Phase 1 implementation requirement's
-`DESIGN.md` actually locks in — update it there first, then reflect the final choice
-here.
-
-## 7. Repository layout (target — grows as phases land)
+## 7. Repository layout (as built)
 
 ```
 binance-market-observatory/
@@ -121,6 +122,9 @@ binance-market-observatory/
 ├── AGENTS.md
 ├── CHANGELOG.md
 ├── STATUS.md
+├── requirements.txt
+├── requirements-dev.txt
+├── pytest.ini
 ├── docs/
 │   ├── THESIS.md
 │   ├── SCOPE.md
@@ -131,15 +135,32 @@ binance-market-observatory/
 │           ├── DESIGN.md
 │           ├── TASKS.md
 │           └── TRACKER.md
-├── src/                 # created when Phase 1 implementation begins
-│   ├── connectors/
-│   ├── storage/
-│   ├── registry/
-│   └── health/
-├── config/              # capability registry + connector configs
+├── src/
+│   ├── config.py          # capability registry loader (YAML -> dataclasses)
+│   ├── models.py          # Envelope contract, taker_side derivation
+│   ├── schema.py           # SQLite DDL
+│   ├── storage.py          # DBWriter: the single writer, raw + normalized inserts
+│   ├── ratelimit.py         # RestWeightLimiter, WsConnectionLimiter
+│   ├── binance_client.py    # RestClient, ws_messages() (reconnect/backoff)
+│   ├── depth_sync.py         # DepthSyncTracker: snapshot+sync+resync state machine
+│   ├── health.py             # audit report generator
+│   ├── audit.py               # CLI: generate the audit report
+│   ├── main.py                 # entrypoint: registry -> connectors -> queue -> writer
+│   └── connectors/
+│       ├── common.py            # shared parsers (spot/usdm/coinm wire shapes match)
+│       ├── market.py             # generic connector driving spot/usdm/coinm
+│       ├── spot.py, usdm.py, coinm.py  # per-product REST paths + futures flags
+│       └── options.py             # raw-fidelity-only connector (see its docstring)
+├── config/
+│   └── settings.yaml       # the capability registry
+├── data/                    # SQLite database lives here (gitignored)
 └── tests/
+    ├── mock_binance.py      # local Binance protocol stand-in
+    ├── test_integration_spot.py   # full pipeline test against the mock
+    ├── test_main_and_audit.py     # entrypoint + audit report smoke test
+    └── test_*.py                   # unit tests (ratelimit, depth_sync, storage, parsers)
 ```
 
-`src/`, `config/`, and `tests/` do not exist yet — they land with the Phase 1
-implementation requirement, not before, so the repo never carries empty speculative
-scaffolding.
+Not yet built: a live 72-hour run against real Binance (blocked in this sandbox --
+see `STATUS.md`), and normalized tables for Options (raw-fidelity only until its wire
+format is confirmed against live docs).

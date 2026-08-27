@@ -5,6 +5,36 @@ making any change — see `AGENTS.md` rule 5.
 
 Format: reverse chronological, one entry per change, dated.
 
+## 2026-08-27 (3)
+
+- Implemented the full collector: Spot, USDS-M Futures, COIN-M Futures (raw-fidelity
+  Options, disabled by default). New: `src/config.py`, `src/models.py`, `src/schema.py`,
+  `src/storage.py`, `src/ratelimit.py`, `src/binance_client.py`, `src/depth_sync.py`,
+  `src/health.py`, `src/audit.py`, `src/main.py`, `src/connectors/*`,
+  `config/settings.yaml`, 35 tests including a local protocol-faithful mock Binance
+  server (`tests/mock_binance.py`) and a full pipeline integration test.
+- **Environment constraint discovered and documented**: this sandbox's egress proxy
+  blocks `api.binance.com`/`stream.binance.com` (403, org policy) and does not support
+  WebSocket upgrades through it at all (confirmed via the proxy's own status/README).
+  All testing here therefore validated the pipeline against a local mock reproducing
+  Binance's real wire format, not against live Binance. A live run in an environment
+  with real network access is still required before Phase 1 (or the futures/options
+  work) can be marked Done -- tracked as the one open item in both requirement
+  folders' `TRACKER.md`.
+- Testing caught and fixed three real bugs before they could have caused silent data
+  loss in production: two SQL column/placeholder-count mismatches in `book_ticker` and
+  `ticker_24h` inserts (would have crashed every write for those streams), a
+  depth-resync replay bug where the first buffered event after a snapshot skipped its
+  intended continuity-check exemption, and a reconnect-detection dead branch in
+  `ws_messages` (aiohttp swallows CLOSE/CLOSING/CLOSED in its iterator, so the
+  "disconnected" event was never actually emitted on a clean server-initiated close).
+- Added `docs/requirements/2026-08-27-futures-and-options-collectors/` to record the
+  futures/options work as its own requirement, per the user's explicit request to
+  implement the full product scope in one pass rather than gating each product behind
+  the prior one's 24h clean run (docs/THESIS.md #9's original staged rollout).
+- Updated `docs/ARCHITECTURE.md` #6-#7 (tech stack, repo layout) to match what was
+  actually built.
+
 ## 2026-08-27 (2)
 
 - Added `AGENTS.md` rule 8: recommends the [Ponytail](https://github.com/DietrichGebert/ponytail)
