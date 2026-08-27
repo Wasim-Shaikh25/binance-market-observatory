@@ -5,6 +5,21 @@ making any change — see `AGENTS.md` rule 5.
 
 Format: reverse chronological, one entry per change, dated.
 
+## 2026-08-27 (17)
+
+- Enabled previously skipped config feeds:
+  - Smoke: full kline set `1m, 5m, 15m, 1h, 4h, 1d` for Spot / USDS-M / COIN-M / Options
+  - Production `settings.yaml`: Options **enabled** with a small symbol list + same
+    kline set (not full-universe Options REST — rate-limit safe)
+- Requirement: `docs/requirements/2026-08-27-enable-disabled-config-feeds/`
+
+## 2026-08-27 (16)
+
+- Fixed false 🟡 PARTIAL on **depth↔bookTicker** reconciliation: the check used
+  the latest `depth_snapshots` row, often Options REST depth (no `book_ticker`).
+  It now only pairs Spot/USDS-M/COIN-M snapshots with bookTicker.
+- Requirement: `docs/requirements/2026-08-27-fix-depth-book-reconcile/`.
+
 ## 2026-08-27 (15)
 
 - **ClickHouse is the durable hot store**; SQLite is optional/ephemeral:

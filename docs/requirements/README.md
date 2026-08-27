@@ -41,5 +41,7 @@ how-to.
 | [`2026-08-27-clickhouse-readable-benchmark`](2026-08-27-clickhouse-readable-benchmark/) | ✅ Done | Docker ClickHouse load of one smoke DB; size + readable SELECT proof |
 | [`2026-08-27-dual-write-clickhouse-zstd-archive`](2026-08-27-dual-write-clickhouse-zstd-archive/) | ✅ Done | Live dual-write: SQLite + ClickHouse + streaming NDJSON/zstd archive |
 | [`2026-08-27-clickhouse-primary-drop-sqlite`](2026-08-27-clickhouse-primary-drop-sqlite/) | ✅ Done | Full CH schema; SQLite ephemeral via `persist:false`; checklist smoke PASS |
+| [`2026-08-27-fix-depth-book-reconcile`](2026-08-27-fix-depth-book-reconcile/) | ✅ Done | depth↔bookTicker check skips Options snapshots (false PARTIAL) |
+| [`2026-08-27-enable-disabled-config-feeds`](2026-08-27-enable-disabled-config-feeds/) | ✅ Done | Full kline intervals in smoke; Options on in settings.yaml |
 
 Update this table whenever a folder is added or its status changes.

@@ -27,3 +27,8 @@ is removed after stop when CH and/or archive is enabled.
 
 1. Longer clean capture on ClickHouse + archive (24–72h)
 2. Optional: validate directly against ClickHouse (no ephemeral SQLite)
+
+## Recent
+
+- depth↔bookTicker reconcile no longer falsely PARTIALs on Options depth.
+- Smoke + `settings.yaml`: full kline intervals; Options enabled (curated symbol list).

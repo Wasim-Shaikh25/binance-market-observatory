@@ -15,7 +15,7 @@ products:
     symbol_universe: list
     symbol_list: ["BTCUSDT", "ETHUSDT"]
     instrument_poll_minutes: 60
-    kline_intervals: ["1m"]
+    kline_intervals: ["1m", "5m", "15m", "1h", "4h", "1d"]
     depth:
       enabled: true
       mode: top_n
@@ -31,7 +31,7 @@ products:
     symbol_universe: list
     symbol_list: ["BTCUSDT", "ETHUSDT"]
     instrument_poll_minutes: 60
-    kline_intervals: ["1m"]
+    kline_intervals: ["1m", "5m", "15m", "1h", "4h", "1d"]
     depth:
       enabled: true
       mode: top_n
@@ -50,7 +50,7 @@ products:
     symbol_universe: list
     symbol_list: ["BTCUSD_PERP", "ETHUSD_PERP"]
     instrument_poll_minutes: 60
-    kline_intervals: ["1m"]
+    kline_intervals: ["1m", "5m", "15m", "1h", "4h", "1d"]
     depth:
       enabled: true
       mode: top_n
@@ -69,7 +69,7 @@ products:
     symbol_universe: list
     symbol_list: ["BTC-260828-65000-C", "BTC-260828-65000-P"]
     instrument_poll_minutes: 60
-    kline_intervals: ["1m"]
+    kline_intervals: ["1m", "5m", "15m", "1h", "4h", "1d"]
 
 rate_limits:
   ws_connections_per_5min: 150

@@ -1275,49 +1275,71 @@ async def check_reconcile_candles(conn: aiosqlite.Connection) -> list[CheckResul
 
 
 async def check_reconcile_depth_book(conn: aiosqlite.Connection) -> list[CheckResult]:
-    """Compare latest depth snapshot top-of-book vs a nearby bookTicker (soft)."""
-    snap = await _rows(
+    """Compare a depth snapshot top-of-book vs bookTicker (soft).
+
+    Only Spot / USDS-M / COIN-M — Options depth is REST-only and has no
+    bookTicker stream, so using the latest snapshot by id falsely PARTIALs.
+    """
+    snaps = await _rows(
         conn,
         """
         SELECT product, symbol, bids_json, asks_json, observed_at
-        FROM depth_snapshots ORDER BY id DESC LIMIT 1
+        FROM depth_snapshots
+        WHERE product IN ('SPOT', 'USDM_FUTURES', 'COINM_FUTURES')
+        ORDER BY id DESC
+        LIMIT 20
         """,
     )
-    if not snap:
-        return [CheckResult("reconciliation", "depth↔bookTicker", Status.NO_DATA, "no depth snapshots")]
-    product, symbol, bids_json, asks_json, observed_at = snap[0]
-    try:
-        bids = json.loads(bids_json)
-        asks = json.loads(asks_json)
-        best_bid = max((float(p) for p, q in bids if float(q) > 0), default=None)
-        best_ask = min((float(p) for p, q in asks if float(q) > 0), default=None)
-    except Exception as exc:  # noqa: BLE001
-        return [CheckResult("reconciliation", "depth↔bookTicker", Status.FAIL, f"bad snapshot JSON: {exc}")]
+    if not snaps:
+        return [
+            CheckResult(
+                "reconciliation",
+                "depth↔bookTicker",
+                Status.NO_DATA,
+                "no Spot/Futures depth snapshots (Options depth skipped — no bookTicker)",
+            )
+        ]
 
-    bt = await _rows(
-        conn,
-        """
-        SELECT best_bid_price, best_ask_price, observed_at FROM book_ticker
-        WHERE product=? AND symbol=? ORDER BY id DESC LIMIT 1
-        """,
-        (product, symbol),
-    )
-    if not bt or best_bid is None or best_ask is None:
-        return [CheckResult("reconciliation", "depth↔bookTicker", Status.PARTIAL, "missing bookTicker or empty book")]
+    last_err = "missing bookTicker or empty book"
+    for product, symbol, bids_json, asks_json, observed_at in snaps:
+        try:
+            bids = json.loads(bids_json)
+            asks = json.loads(asks_json)
+            best_bid = max((float(p) for p, q in bids if float(q) > 0), default=None)
+            best_ask = min((float(p) for p, q in asks if float(q) > 0), default=None)
+        except Exception as exc:  # noqa: BLE001
+            last_err = f"bad snapshot JSON: {exc}"
+            continue
+        if best_bid is None or best_ask is None:
+            last_err = "empty book on depth snapshot"
+            continue
 
-    bb, ba, bt_obs = bt[0]
-    # Timing differs — allow relative tolerance
-    bid_ok = abs(float(bb) - best_bid) / max(best_bid, 1e-12) < 0.002
-    ask_ok = abs(float(ba) - best_ask) / max(best_ask, 1e-12) < 0.002
-    return [
-        CheckResult(
-            "reconciliation",
-            "depth↔bookTicker",
-            Status.PASS if bid_ok and ask_ok else Status.PARTIAL,
-            f"{product} {symbol}: depth_bid={best_bid} book={bb}; depth_ask={best_ask} book={ba}; "
-            f"snap_at={observed_at}; book_at={bt_obs} (timing not identical)",
+        bt = await _rows(
+            conn,
+            """
+            SELECT best_bid_price, best_ask_price, observed_at FROM book_ticker
+            WHERE product=? AND symbol=? ORDER BY id DESC LIMIT 1
+            """,
+            (product, symbol),
         )
-    ]
+        if not bt:
+            last_err = f"no bookTicker for {product} {symbol}"
+            continue
+
+        bb, ba, bt_obs = bt[0]
+        bid_ok = abs(float(bb) - best_bid) / max(best_bid, 1e-12) < 0.002
+        ask_ok = abs(float(ba) - best_ask) / max(best_ask, 1e-12) < 0.002
+        return [
+            CheckResult(
+                "reconciliation",
+                "depth↔bookTicker",
+                Status.PASS if bid_ok and ask_ok else Status.PARTIAL,
+                f"{product} {symbol}: depth_bid={best_bid} book={bb}; depth_ask={best_ask} book={ba}; "
+                f"snap_at={observed_at}; book_at={bt_obs} (timing not identical)",
+            )
+        ]
+
+    return [CheckResult("reconciliation", "depth↔bookTicker", Status.PARTIAL, last_err)]
 
 
 async def check_coverage_matrix(conn: aiosqlite.Connection, settings: Settings | None = None) -> list[CheckResult]:
