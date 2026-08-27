@@ -1,0 +1,32 @@
+# Requirements Workflow
+
+This folder is the spec-driven work log for the project. Every unit of work starts here
+before any code is written. Full rules live in `AGENTS.md`; this file is the quick
+how-to.
+
+## Creating a new requirement
+
+1. Make a new folder: `docs/requirements/<YYYY-MM-DD>-<short-kebab-slug>/`
+   - `YYYY-MM-DD` = the date the requirement was opened.
+   - `<short-kebab-slug>` = a few words describing what the requirement covers, e.g.
+     `phase1-spot-collector`, `depth-resync-fix`, `options-connector`.
+2. Inside it, create four files, in this order:
+   - `REQUIREMENTS.md` — what is needed and why, scoped against `docs/SCOPE.md`.
+   - `DESIGN.md` — how it will be built: modules touched, schema changes, data flow,
+     interfaces to other modules, config/registry entries.
+   - `TASKS.md` — the concrete task breakdown derived from the design.
+   - `TRACKER.md` — one checkbox per task from `TASKS.md`, kept ticked live as work
+     happens (not batched at the end).
+3. Do not start writing code until at least `REQUIREMENTS.md` and `DESIGN.md` exist.
+4. Never edit a previous requirement folder's `REQUIREMENTS.md`/`DESIGN.md` to widen its
+   scope after the fact — open a new folder instead. Historical folders are a record of
+   what was decided and when.
+
+## Index
+
+| Folder | Status | Summary |
+|---|---|---|
+| [`2026-08-27-repo-scaffold-and-governance`](2026-08-27-repo-scaffold-and-governance/) | ✅ Done | Documentation/governance scaffold: thesis, scope, architecture, AGENTS.md, changelog/status, requirements workflow itself |
+| [`2026-08-27-phase1-spot-collector`](2026-08-27-phase1-spot-collector/) | 🔲 Not started | Phase 1 implementation: Spot instruments/margin metadata, trades, aggTrades, bookTicker, ticker, candles, depth, health/audit |
+
+Update this table whenever a folder is added or its status changes.
