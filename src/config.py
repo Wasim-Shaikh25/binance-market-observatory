@@ -73,6 +73,8 @@ class Settings:
     products: dict[str, ProductConfig]
     ws_connections_per_5min: int = 150
     max_streams_per_connection: int = 100
+    # When False and CH/archive is enabled, delete the SQLite file after stop.
+    database_persist: bool = True
     clickhouse: ClickHouseSinkConfig = field(default_factory=ClickHouseSinkConfig)
     raw_archive: RawArchiveConfig = field(default_factory=RawArchiveConfig)
 
@@ -107,8 +109,10 @@ def load_settings(path: str) -> Settings:
     sinks = raw.get("sinks") or {}
     ch_raw = sinks.get("clickhouse") or {}
     ar_raw = sinks.get("raw_archive") or {}
+    db_raw = raw.get("database") or {}
     return Settings(
-        database_path=raw["database"]["path"],
+        database_path=db_raw["path"],
+        database_persist=bool(db_raw.get("persist", True)),
         products=products,
         ws_connections_per_5min=int(rl.get("ws_connections_per_5min", 150)),
         max_streams_per_connection=int(rl.get("max_streams_per_connection", 100)),

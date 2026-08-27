@@ -50,11 +50,16 @@ def _run_id() -> str:
     return os.environ.get("RUN_ID") or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
-async def run(config_path: str) -> None:
+async def run(config_path: str, duration_seconds: float | None = None) -> None:
     settings = load_settings(config_path)
     run_id = _run_id()
     db_path = resolve_db_path(settings.database_path, run_id)
     logger.info("Run %s starting. Writing to database: %s", run_id, db_path)
+    # Expose for wrappers / validation scripts
+    os.environ["BMO_RUN_ID"] = run_id
+    os.environ["BMO_DB_PATH"] = db_path
+    if settings.clickhouse.enabled:
+        os.environ["BMO_CH_DB"] = resolve_path_template(settings.clickhouse.database, run_id)
     conn = await open_db(db_path)
     queue: asyncio.Queue = asyncio.Queue(maxsize=10000)
 
@@ -125,7 +130,15 @@ async def run(config_path: str) -> None:
                     pass  # not available on all platforms
 
             try:
-                await stop.wait()
+                if duration_seconds is not None and duration_seconds > 0:
+                    logger.info("Timed run: stopping after %.0f seconds", duration_seconds)
+                    try:
+                        await asyncio.wait_for(stop.wait(), timeout=duration_seconds)
+                    except asyncio.TimeoutError:
+                        logger.info("Duration elapsed, stopping connectors...")
+                        stop.set()
+                else:
+                    await stop.wait()
                 logger.info("Shutdown requested, stopping connectors...")
             finally:
                 for t in product_tasks:
@@ -138,13 +151,29 @@ async def run(config_path: str) -> None:
         await queue.put(None)  # sentinel to stop the writer
         await writer_task
         await conn.close()
+        durable_elsewhere = settings.clickhouse.enabled or settings.raw_archive.enabled
+        if not settings.database_persist and durable_elsewhere:
+            for suffix in ("", "-wal", "-shm"):
+                path = db_path + suffix
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                        logger.info("Removed non-persistent SQLite file: %s", path)
+                except OSError as exc:
+                    logger.warning("Could not remove %s: %s", path, exc)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config/settings.yaml")
+    parser.add_argument(
+        "--duration-seconds",
+        type=float,
+        default=None,
+        help="Stop automatically after N seconds (smoke / timed captures).",
+    )
     args = parser.parse_args()
-    asyncio.run(run(args.config))
+    asyncio.run(run(args.config, duration_seconds=args.duration_seconds))
 
 
 if __name__ == "__main__":

@@ -40,5 +40,6 @@ how-to.
 | [`2026-08-27-storage-format-benchmark`](2026-08-27-storage-format-benchmark/) | ✅ Done | One-DB SQLite vs NDJSON/gzip vs Parquet+ZSTD size benchmark |
 | [`2026-08-27-clickhouse-readable-benchmark`](2026-08-27-clickhouse-readable-benchmark/) | ✅ Done | Docker ClickHouse load of one smoke DB; size + readable SELECT proof |
 | [`2026-08-27-dual-write-clickhouse-zstd-archive`](2026-08-27-dual-write-clickhouse-zstd-archive/) | ✅ Done | Live dual-write: SQLite + ClickHouse + streaming NDJSON/zstd archive |
+| [`2026-08-27-clickhouse-primary-drop-sqlite`](2026-08-27-clickhouse-primary-drop-sqlite/) | ✅ Done | Full CH schema; SQLite ephemeral via `persist:false`; checklist smoke PASS |
 
 Update this table whenever a folder is added or its status changes.

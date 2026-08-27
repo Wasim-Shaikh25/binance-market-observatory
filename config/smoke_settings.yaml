@@ -1,7 +1,10 @@
 # Temporary smoke-test config: small symbol set + short poll intervals so a
 # ~3 minute live run can verify every intended table fills. Not for production.
+# Durable store = ClickHouse + zstd archive. SQLite is ephemeral (deleted after
+# stop when persist:false). For checklist validation keep persist:true for that run.
 database:
   path: data/market_{run_id}.db
+  persist: false
 
 products:
   spot:

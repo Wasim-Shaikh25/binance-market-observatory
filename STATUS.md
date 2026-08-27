@@ -4,27 +4,26 @@
 
 ## Current phase
 
-**Dual-write mode available:** SQLite (primary) + optional ClickHouse + zstd
-NDJSON archive. Compare both after a run; remove SQLite only after that.
+**ClickHouse + zstd archive are the durable stores.** SQLite may still be written
+during a run for ops/validation, but with `database.persist: false` the `.db` file
+is removed after stop when CH and/or archive is enabled.
 
-| Sink | Role now |
+| Sink | Role |
 |---|---|
-| SQLite | Still primary / comparison baseline |
-| ClickHouse | Optional live dual-write (hot/query) |
-| `raw.ndjson.zst` | Optional streaming raw evidence archive |
+| ClickHouse | Durable hot / query store (full normalized + raw_events) |
+| `raw.ndjson.zst` | Durable raw evidence archive |
+| SQLite | Ephemeral ops + optional checklist target (`persist`) |
 
-## Enable dual-write
+## Smoke / validate
 
-1. `docker start bmo-clickhouse` (user `default` / password `bench`)
-2. Set in config (`config/smoke_settings.yaml` already on):
-   - `sinks.clickhouse.enabled: true`
-   - `sinks.raw_archive.enabled: true`
-3. `python -m src.main --config config/smoke_settings.yaml`
-4. Stop with **Ctrl+C** (graceful) so CH batch + archive flush
-5. Compare: `python validation/script/compare_sqlite_clickhouse.py --db … --ch-db …`
+1. `docker start bmo-clickhouse`
+2. `python -m src.main --config config/smoke_settings.yaml --duration-seconds 180`
+3. For a checklist run, temporarily set `database.persist: true`, then:
+   - `python -m src.validate --db data/market_<run_id>.db --config config/smoke_settings.yaml --out validation/report/BINANCE_DATA_CAPTURE_REPORT.md`
+   - `python validation/script/compare_sqlite_clickhouse.py --db … --ch-db bmo_<run_id>`
+   - Delete local `data/*.db` when done (or rely on `persist: false`)
 
 ## Next
 
-1. Longer dual-write capture → compare sizes/counts
-2. If CH + archive look good → drop SQLite in a follow-up change
-3. Then 24–72h clean run on the chosen store
+1. Longer clean capture on ClickHouse + archive (24–72h)
+2. Optional: validate directly against ClickHouse (no ephemeral SQLite)

@@ -32,6 +32,100 @@ rate_limits: {}
     s = load_settings(str(p))
     assert s.clickhouse.enabled is False
     assert s.raw_archive.enabled is False
+    assert s.database_persist is True
+
+
+def test_settings_persist_false(tmp_path):
+    p = tmp_path / "s.yaml"
+    p.write_text(
+        """
+database:
+  path: data/x.db
+  persist: false
+products:
+  spot:
+    enabled: false
+    rest_base_url: https://api.binance.com
+    ws_base_url: wss://stream.binance.com:9443
+rate_limits: {}
+""",
+        encoding="utf-8",
+    )
+    assert load_settings(str(p)).database_persist is False
+
+
+def test_clickhouse_norm_covers_core_kinds():
+    from src.clickhouse_sink import ClickHouseSink
+    from src.config import ClickHouseSinkConfig
+
+    sink = ClickHouseSink(ClickHouseSinkConfig(), database="bmo_test")
+    trade = Envelope(
+        product="SPOT",
+        stream_name="btcusdt@trade",
+        source_endpoint="wss://x",
+        kind="trade",
+        payload={"trade_id": 1, "price": "1", "quantity": "1", "trade_time": 1, "buyer_maker": False},
+        symbol="BTCUSDT",
+    )
+    table, line = sink._norm_line(trade)
+    assert table == "trades"
+    assert "BTCUSDT" in line
+
+    candle = Envelope(
+        product="SPOT",
+        stream_name="btcusdt@kline_1m",
+        source_endpoint="wss://x",
+        kind="candle",
+        payload={
+            "interval": "1m",
+            "open_time": 1,
+            "close_time": 2,
+            "open": "1",
+            "high": "1",
+            "low": "1",
+            "close": "1",
+            "base_volume": "1",
+            "quote_volume": "1",
+            "is_final": True,
+        },
+        symbol="BTCUSDT",
+    )
+    table, line = sink._norm_line(candle)
+    assert table == "candles"
+
+    oi = Envelope(
+        product="USDM_FUTURES",
+        stream_name="rest",
+        source_endpoint="/fapi/v1/openInterest",
+        kind="open_interest",
+        payload={"open_interest": "10", "observation_time": 1},
+        symbol="BTCUSDT",
+    )
+    table, _ = sink._norm_line(oi)
+    assert table == "open_interest"
+
+    mark = Envelope(
+        product="OPTIONS",
+        stream_name="rest",
+        source_endpoint="/eapi/v1/mark",
+        kind="options_mark",
+        payload={"mark_price": "1", "mark_iv": "0.5", "raw": {}},
+        symbol="BTC-260828-65000-C",
+    )
+    table, _ = sink._norm_line(mark)
+    assert table == "options_mark"
+
+    lines = sink._instrument_lines(
+        Envelope(
+            product="SPOT",
+            stream_name="rest",
+            source_endpoint="/api/v3/exchangeInfo",
+            kind="instrument_snapshot",
+            payload={"status": "TRADING", "base_asset": "BTC", "quote_asset": "USDT", "tick_size": "0.01", "step_size": "0.001"},
+            symbol="BTCUSDT",
+        )
+    )
+    assert {t for t, _ in lines} == {"instruments", "instrument_snapshots"}
 
 
 def test_raw_archive_roundtrip(tmp_path):

@@ -31,7 +31,29 @@ def main() -> int:
     args = ap.parse_args()
 
     conn = sqlite3.connect(args.db)
-    tables = ["raw_events", "trades", "agg_trades", "book_ticker"]
+    tables = [
+        "raw_events",
+        "trades",
+        "agg_trades",
+        "book_ticker",
+        "ticker_24h",
+        "candles",
+        "depth_snapshots",
+        "depth_updates",
+        "mark_price",
+        "funding_rate",
+        "open_interest",
+        "liquidations",
+        "futures_positioning",
+        "instruments",
+        "instrument_snapshots",
+        "options_mark",
+        "options_index",
+        "exchange_status",
+        "symbol_coverage",
+        "coverage_history",
+        "gap_fill_jobs",
+    ]
     print(f"{'table':16} {'sqlite':>12} {'clickhouse':>12} {'delta':>10}")
     for t in tables:
         s = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]

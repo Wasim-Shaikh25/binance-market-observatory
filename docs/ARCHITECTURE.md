@@ -22,11 +22,13 @@ change (see `AGENTS.md`, "docs sync" rule).
                                   DB writer (single)
                      ┌─────────────┼─────────────────┐
                      ▼             ▼                 ▼
-              SQLite (WAL)   ClickHouse*      raw.ndjson.zst*
-              primary/compare  optional         optional archive
+              SQLite (WAL)*  ClickHouse         raw.ndjson.zst
+              ephemeral ops   durable hot        durable archive
 
-\* Optional dual sinks via `sinks:` in config — enabled for comparison; SQLite
-  remains until a measured cutover.
+\* SQLite remains for in-run ops (gap-fill reads, system_events) and optional
+  checklist validation. With `database.persist: false` and CH/archive enabled,
+  the `.db` file is deleted after graceful stop — ClickHouse + archive are
+  durable.
 ```
 
 Each product connector is an **independent module**: it owns its own WebSocket/REST
@@ -51,18 +53,21 @@ never through reaching into another connector's internals.
 3. It also performs any product-specific stateful validation it owns (depth update-ID
    continuity, sequence gap detection) and emits health/system events on failure.
 4. The DB writer drains the queue and is the only component that opens write
-   transactions against SQLite. It writes the raw envelope to `raw_events` and, where a
+   transactions against SQLite (when used). It writes the raw envelope to `raw_events` and, where a
    normalized table exists for that data class, writes the normalized row in the same
-   transaction.
+   transaction. Optional dual sinks flush the same envelopes to ClickHouse and the
+   zstd NDJSON archive.
 5. The health/audit subsystem runs independently (scheduled), reading from the DB and
    from connector-exposed counters, and writes rollups to `health`/`system_events`.
 
 ## 3. Storage layer
 
-- Engine: SQLite, WAL mode, single writer enforced by routing all writes through the
-  DB writer component (never opened for write from more than one process/thread).
-- Migration path if/when SQLite is outgrown: benchmark first, then consider
-  PostgreSQL/ClickHouse/Parquet — not decided speculatively.
+- Primary durable store: **ClickHouse** (full normalized mirrors + `raw_events`,
+  prices as String) plus streaming **NDJSON+zstd** raw archive.
+- SQLite: WAL mode, single writer; used for in-run ops and optional validation.
+  Not retained when `database.persist: false` and a durable sink is enabled.
+- Migration path if/when needed: already on ClickHouse for hot data; Parquet remains
+  an optional cold-export research path only — not on the live write path.
 
 ### 3.1 Core tables (shape, not final DDL — DDL lives with the implementing requirement)
 

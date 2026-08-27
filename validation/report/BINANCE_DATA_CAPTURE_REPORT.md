@@ -3,10 +3,10 @@ BINANCE MARKET OBSERVATORY
 DATA CAPTURE AUDIT
 ========================================
 
-Generated: 2026-08-27T12:51:29.204008+00:00
-Database: `data/market_smoke_gap_20260827T181441Z.db` (99,979,264 bytes)
-Period start (raw_events): 2026-08-27T12:44:41.829184+00:00
-Period end (raw_events): 2026-08-27T12:51:08.313991+00:00
+Generated: 2026-08-27T16:57:46.494885+00:00
+Database: `data/market_smoke_chprim_20260827T222300Z.db` (95,174,656 bytes)
+Period start (raw_events): 2026-08-27T16:54:09.575048+00:00
+Period end (raw_events): 2026-08-27T16:57:09.549694+00:00
 
 This report validates **data availability, integrity, timestamps,
 synchronization, provenance, and storage correctness** only.
@@ -113,53 +113,53 @@ DETAILED CHECKS
 
 ### products
 
-- ✅ **PASS** — SPOT: enabled; instruments=3685; raw_events=88282
-- ✅ **PASS** — USDM_FUTURES: enabled; instruments=877; raw_events=14003
-- ✅ **PASS** — COINM_FUTURES: enabled; instruments=30; raw_events=30330
-- ✅ **PASS** — OPTIONS: raw_events=296; instruments=2; trades=40; options_mark=12; options_index=6
+- ✅ **PASS** — SPOT: enabled; instruments=3685; raw_events=88098
+- ✅ **PASS** — USDM_FUTURES: enabled; instruments=877; raw_events=9903
+- ✅ **PASS** — COINM_FUTURES: enabled; instruments=30; raw_events=27852
+- ✅ **PASS** — OPTIONS: raw_events=149; instruments=2; trades=40; options_mark=6; options_index=3
 - ✅ **PASS** — MARGIN metadata (via Spot): spot_instruments=3685; margin_tradable=1 → 794; null status=0
 
 ### instruments
 
-- ✅ **PASS** — SPOT: instruments=3685; snapshots=3685; trading≈1358; inactive≈2327; tick_size=3685; step_size=3685; base=3685; quote=3685; first=2026-08-27T12:44:42.539065+00:00; last=2026-08-27T12:44:42.554122+00:00
-- ✅ **PASS** — USDM_FUTURES: instruments=877; snapshots=877; trading≈746; inactive≈131; tick_size=877; step_size=877; base=877; quote=877; first=2026-08-27T12:44:42.866166+00:00; last=2026-08-27T12:44:42.870166+00:00
-- ✅ **PASS** — COINM_FUTURES: instruments=30; snapshots=30; trading≈0; inactive≈0; tick_size=30; step_size=30; base=30; quote=30; first=2026-08-27T12:44:42.287953+00:00; last=2026-08-27T12:44:42.287953+00:00
+- ✅ **PASS** — SPOT: instruments=3685; snapshots=3685; trading≈1358; inactive≈2327; tick_size=3685; step_size=3685; base=3685; quote=3685; first=2026-08-27T16:54:10.031185+00:00; last=2026-08-27T16:54:10.050477+00:00
+- ✅ **PASS** — USDM_FUTURES: instruments=877; snapshots=877; trading≈746; inactive≈131; tick_size=877; step_size=877; base=877; quote=877; first=2026-08-27T16:54:10.082364+00:00; last=2026-08-27T16:54:10.086348+00:00
+- ✅ **PASS** — COINM_FUTURES: instruments=30; snapshots=30; trading≈0; inactive≈0; tick_size=30; step_size=30; base=30; quote=30; first=2026-08-27T16:54:10.199760+00:00; last=2026-08-27T16:54:10.199760+00:00
 - ✅ **PASS** — historical snapshots possible: instruments with >1 snapshot row so far: 0 (schema supports history; multi-row only appears after metadata changes / re-polls)
 - ✅ **PASS** — OPTIONS: options instruments stored=2
 
 ### raw_events
 
-- ✅ **PASS** — existence + provenance columns: rows=132913; null_payload=0; null_product=0
-- ✅ **PASS** — count by product: COINM_FUTURES=30330, EXCHANGE=2, OPTIONS=296, SPOT=88282, USDM_FUTURES=14003
+- ✅ **PASS** — existence + provenance columns: rows=126003; null_payload=0; null_product=0
+- ✅ **PASS** — count by product: COINM_FUTURES=27852, EXCHANGE=1, OPTIONS=149, SPOT=88098, USDM_FUTURES=9903
 - ✅ **PASS** — random payload JSON validity (n=50): invalid_json=0/50
 - ✅ **PASS** — receive timestamp (observed_at): observed_at required NOT NULL on schema; stream_name + source_endpoint preserved
 
 ### trades
 
-- ✅ **PASS** — SPOT: rows=20147; unique(symbol,trade_id)=20147; dup≈0; null_price/qty=0; null_buyer_maker=0; earliest_ms=1787834682833; latest_ms=1787835025327
-- ✅ **PASS** — USDM_FUTURES: rows=3424; unique(symbol,trade_id)=3424; dup≈0; null_price/qty=0; null_buyer_maker=0; earliest_ms=1787834682907; latest_ms=1787835025255
-- ✅ **PASS** — COINM_FUTURES: rows=1046; unique(symbol,trade_id)=1046; dup≈0; null_price/qty=0; null_buyer_maker=0; earliest_ms=1787834684766; latest_ms=1787835024792
+- ✅ **PASS** — SPOT: rows=21051; unique(symbol,trade_id)=21051; dup≈0; null_price/qty=0; null_buyer_maker=0; earliest_ms=1787849651017; latest_ms=1787849825349
+- ✅ **PASS** — USDM_FUTURES: rows=2828; unique(symbol,trade_id)=2828; dup≈0; null_price/qty=0; null_buyer_maker=0; earliest_ms=1787849651111; latest_ms=1787849829763
+- ✅ **PASS** — COINM_FUTURES: rows=1057; unique(symbol,trade_id)=1057; dup≈0; null_price/qty=0; null_buyer_maker=0; earliest_ms=1787849652376; latest_ms=1787849829297
 - ✅ **PASS** — OPTIONS: rows=40 (REST /eapi/v1/trades)
 
 ### agg_trades
 
-- ✅ **PASS** — SPOT: rows=5876; with first/last trade id=5876
-- ✅ **PASS** — USDM_FUTURES: rows=1538; with first/last trade id=1538
-- ✅ **PASS** — COINM_FUTURES: rows=593; with first/last trade id=593
+- ✅ **PASS** — SPOT: rows=4561; with first/last trade id=4561
+- ✅ **PASS** — USDM_FUTURES: rows=1100; with first/last trade id=1100
+- ✅ **PASS** — COINM_FUTURES: rows=712; with first/last trade id=712
 
 ### book_ticker
 
-- ✅ **PASS** — SPOT: rows=54107; null/negative=0; severe_cross_sample=0; note: Binance bookTicker has no exchange event timestamp (observed_at only)
-- ✅ **PASS** — USDM_FUTURES: rows=3736; null/negative=0; severe_cross_sample=0; note: Binance bookTicker has no exchange event timestamp (observed_at only)
-- ✅ **PASS** — COINM_FUTURES: rows=23707; null/negative=0; severe_cross_sample=0; note: Binance bookTicker has no exchange event timestamp (observed_at only)
+- ✅ **PASS** — SPOT: rows=56483; null/negative=0; severe_cross_sample=0; note: Binance bookTicker has no exchange event timestamp (observed_at only)
+- ✅ **PASS** — USDM_FUTURES: rows=2733; null/negative=0; severe_cross_sample=0; note: Binance bookTicker has no exchange event timestamp (observed_at only)
+- ✅ **PASS** — COINM_FUTURES: rows=23329; null/negative=0; severe_cross_sample=0; note: Binance bookTicker has no exchange event timestamp (observed_at only)
 - ⚪ **NOT_IMPLEMENTED** — OPTIONS: Options uses REST ticker, not bookTicker stream
 
 ### depth
 
-- ✅ **PASS** — SPOT: depth_symbols≈1; snapshots=1; updates=3426; depth_resync events=0 (gaps detected & recorded, not silent)
-- ✅ **PASS** — USDM_FUTURES: depth_symbols≈2; snapshots=2; updates=1740; depth_resync events=0 (gaps detected & recorded, not silent)
-- ✅ **PASS** — COINM_FUTURES: depth_symbols≈2; snapshots=4; updates=3095; depth_resync events=2 (gaps detected & recorded, not silent)
-- ✅ **PASS** — OPTIONS: depth_snapshots=12 (REST /eapi/v1/depth polls; no WS depth sync)
+- ✅ **PASS** — SPOT: depth_symbols≈1; snapshots=1; updates=1791; depth_resync events=0 (gaps detected & recorded, not silent)
+- ✅ **PASS** — USDM_FUTURES: depth_symbols≈2; snapshots=2; updates=896; depth_resync events=0 (gaps detected & recorded, not silent)
+- ✅ **PASS** — COINM_FUTURES: depth_symbols≈2; snapshots=7; updates=1628; depth_resync events=5 (gaps detected & recorded, not silent)
+- ✅ **PASS** — OPTIONS: depth_snapshots=6 (REST /eapi/v1/depth polls; no WS depth sync)
 
 ### depth_coverage
 
@@ -168,83 +168,83 @@ DETAILED CHECKS
 
 ### candles
 
-- ✅ **PASS** — configured intervals present: configured=['1m']; found=['1m']; counts={'1m': 42}
+- ✅ **PASS** — configured intervals present: configured=['1m']; found=['1m']; counts={'1m': 24}
 - ⚪ **NOT_IMPLEMENTED** — interval 15m: not in config kline_intervals (add there to collect)
 - ⚪ **NOT_IMPLEMENTED** — interval 4h: not in config kline_intervals (add there to collect)
 - ⚪ **NOT_IMPLEMENTED** — interval 1d: not in config kline_intervals (add there to collect)
-- ✅ **PASS** — OHLC invariants: rows=42; ohlc_violations=0
-- ✅ **PASS** — final vs in-progress flag: is_final=1 → 36; is_final=0 → 6
+- ✅ **PASS** — OHLC invariants: rows=24; ohlc_violations=0
+- ✅ **PASS** — final vs in-progress flag: is_final=1 → 18; is_final=0 → 6
 
 ### ticker_24h
 
-- ✅ **PASS** — SPOT: rows=683; symbols=2
-- ✅ **PASS** — USDM_FUTURES: rows=340; symbols=2
-- ✅ **PASS** — COINM_FUTURES: rows=182; symbols=2
-- ✅ **PASS** — OPTIONS: rows=12 (REST /eapi/v1/ticker)
+- ✅ **PASS** — SPOT: rows=348; symbols=2
+- ✅ **PASS** — USDM_FUTURES: rows=178; symbols=2
+- ✅ **PASS** — COINM_FUTURES: rows=125; symbols=2
+- ✅ **PASS** — OPTIONS: rows=6 (REST /eapi/v1/ticker)
 
 ### mark_price
 
-- ✅ **PASS** — USDM_FUTURES: rows=686; with_index_price=686; with_event_time=686; funding_rate on mark_price = estimated/current (not settled)
-- ✅ **PASS** — COINM_FUTURES: rows=686; with_index_price=686; with_event_time=686; funding_rate on mark_price = estimated/current (not settled)
+- ✅ **PASS** — USDM_FUTURES: rows=358; with_index_price=358; with_event_time=358; funding_rate on mark_price = estimated/current (not settled)
+- ✅ **PASS** — COINM_FUTURES: rows=358; with_index_price=358; with_event_time=358; funding_rate on mark_price = estimated/current (not settled)
 
 ### funding
 
-- ✅ **PASS** — USDM_FUTURES: rows=686 (derived from markPrice stream — estimated/current, not historical settled series)
-- ✅ **PASS** — COINM_FUTURES: rows=686 (derived from markPrice stream — estimated/current, not historical settled series)
+- ✅ **PASS** — USDM_FUTURES: rows=358 (derived from markPrice stream — estimated/current, not historical settled series)
+- ✅ **PASS** — COINM_FUTURES: rows=358 (derived from markPrice stream — estimated/current, not historical settled series)
 
 ### open_interest
 
-- ✅ **PASS** — USDM_FUTURES: rows=6; observation_time present; median_gap_ms=59644; p95_gap_ms=62298; largest_gap_ms=64693
-- ✅ **PASS** — COINM_FUTURES: rows=6; observation_time present; median_gap_ms=60152; p95_gap_ms=64471; largest_gap_ms=77875
+- ✅ **PASS** — USDM_FUTURES: rows=3; observation_time present; median_gap_ms=60906.0; p95_gap_ms=60894; largest_gap_ms=60918
+- ✅ **PASS** — COINM_FUTURES: rows=3; observation_time present; median_gap_ms=60877.0; p95_gap_ms=58879; largest_gap_ms=62875
 
 ### liquidations
 
-- ✅ **PASS** — USDM_FUTURES: events=9; last_event_ms=1787834987693; forceOrder_raw=9
-- ✅ **PASS** — COINM_FUTURES: events=68; last_event_ms=1787835016598; forceOrder_raw=68
+- ✅ **PASS** — USDM_FUTURES: events=14; last_event_ms=1787849802467; forceOrder_raw=14
+- ✅ **PASS** — COINM_FUTURES: events=53; last_event_ms=1787849828664; forceOrder_raw=53
 
 ### positioning
 
-- ✅ **PASS** — USDM_FUTURES: globalLongShortAccountRatio: rows=6 symbols=2; takerlongshortRatio: rows=6 symbols=2; topLongShortAccountRatio: rows=6 symbols=2; topLongShortPositionRatio: rows=6 symbols=2
-- ✅ **PASS** — COINM_FUTURES: globalLongShortAccountRatio: rows=6 symbols=2; takerBuyVol: rows=6 symbols=2; takerSellVol: rows=6 symbols=2; topLongShortAccountRatio: rows=6 symbols=2; topLongShortPositionRatio: rows=6 symbols=2
+- ✅ **PASS** — USDM_FUTURES: globalLongShortAccountRatio: rows=3 symbols=2; takerlongshortRatio: rows=3 symbols=2; topLongShortAccountRatio: rows=3 symbols=2; topLongShortPositionRatio: rows=3 symbols=2
+- ✅ **PASS** — COINM_FUTURES: globalLongShortAccountRatio: rows=3 symbols=2; takerBuyVol: rows=3 symbols=2; takerSellVol: rows=3 symbols=2; topLongShortAccountRatio: rows=3 symbols=2; topLongShortPositionRatio: rows=3 symbols=2
 
 ### options
 
 - ✅ **PASS** — instruments: instruments=2
 - ✅ **PASS** — trades: trades=40 (REST /eapi/v1/trades)
-- ✅ **PASS** — ticker: ticker_24h=12 (REST /eapi/v1/ticker)
-- ✅ **PASS** — iv_greeks: options_mark=12; with_mark_iv=12
-- ✅ **PASS** — index: options_index=6
-- ✅ **PASS** — book: depth_snapshots=12 (REST /eapi/v1/depth polls)
-- ✅ **PASS** — open_interest: open_interest rows=12 (REST /eapi/v1/openInterest)
+- ✅ **PASS** — ticker: ticker_24h=6 (REST /eapi/v1/ticker)
+- ✅ **PASS** — iv_greeks: options_mark=6; with_mark_iv=6
+- ✅ **PASS** — index: options_index=3
+- ✅ **PASS** — book: depth_snapshots=6 (REST /eapi/v1/depth polls)
+- ✅ **PASS** — open_interest: open_interest rows=6 (REST /eapi/v1/openInterest)
 - 🟡 **PARTIAL** — ws: ws_raw_events=0 (REST is primary; WS best-effort — may be 0 on this network)
 
 ### exchange_wide
 
-- ✅ **PASS** — system status / maintenance feed: rows=2; last status_code=0 msg='normal' at 2026-08-27T12:49:42.374265+00:00
+- ✅ **PASS** — system status / maintenance feed: rows=1; last status_code=0 msg='normal' at 2026-08-27T16:54:09.764278+00:00
 
 ### timestamps
 
 - ✅ **PASS** — trades event vs receive: sampled=200; missing_observed_at=0; recv<<event anomalies=0
-- ✅ **PASS** — open_interest source vs receive distinct: sampled=24; near-identical source/receive pairs=0 (should usually differ — poll lag)
+- ✅ **PASS** — open_interest source vs receive distinct: sampled=12; near-identical source/receive pairs=0 (should usually differ — poll lag)
 - ⚫ **NOT_PUBLICLY_AVAILABLE** — book_ticker source timestamp: Binance bookTicker payload has no event time — only observed_at stored (documented)
-- ✅ **PASS** — collector host clock UTC-aware: datetime.now(timezone.utc) ok; local epoch_ms≈1787835088657; NTP not verified from inside process — confirm OS time sync operationally
+- ✅ **PASS** — collector host clock UTC-aware: datetime.now(timezone.utc) ok; local epoch_ms≈1787849866268; NTP not verified from inside process — confirm OS time sync operationally
 
 ### system_health
 
 - ✅ **PASS** — ws_connected: count=9
-- ✅ **PASS** — ws_reconnect: count=0 (informational)
+- ✅ **PASS** — ws_reconnect: count=6 (informational)
 - ✅ **PASS** — rest_failure: count=0 (clean)
 - ✅ **PASS** — db_write_failure: count=0 (clean)
-- ✅ **PASS** — depth_resync: count=2 (informational)
+- ✅ **PASS** — depth_resync: count=5 (informational)
 
 ### raw_vs_normalized
 
-- ✅ **PASS** — trades sample: checked=10; matched_price_qty_id=10
+- ✅ **PASS** — trades sample: checked=6; matched_price_qty_id=6
 - ✅ **PASS** — futures_positioning payload_json: sampled=20; valid_with_value=20
 
 ### reconciliation
 
-- ✅ **PASS** — trades↔candle: SPOT BTCUSDT 1m@1787834940000: trades_in_db=2113; matches OHLC/vol/count within tolerance
+- ✅ **PASS** — trades↔candle: USDM_FUTURES BTCUSDT 1m@1787849760000: trades_in_db=576; matches OHLC/vol/count within tolerance
 - 🟡 **PARTIAL** — depth↔bookTicker: missing bookTicker or empty book
 
 ### coverage_matrix
@@ -255,11 +255,11 @@ DETAILED CHECKS
 
 ### storage
 
-- ✅ **PASS** — growth estimate: db_bytes=99,979,264; tracked_rows≈258019; hours≈0.10735689083333333; rows_per_hour≈2403376.2341400394; by_table={'raw_events': 132913, 'trades': 24657, 'agg_trades': 8007, 'book_ticker': 81550, 'candles': 42, 'depth_updates': 8261, 'ticker_24h': 1217, 'mark_price': 1372}; projections={'7d': {'rows': 403767207, 'bytes': 156454944080}, '30d': {'rows': 1730430888, 'bytes': 670521188917}, '90d': {'rows': 5191292665, 'bytes': 2011563566751}, '1y': {'rows': 21053575811, 'bytes': 8158007798490}} (smoke/list rates do not equal full-universe rates)
+- ✅ **PASS** — growth estimate: db_bytes=95,174,656; tracked_rows≈245609; hours≈0.049992957222222224; rows_per_hour≈4912872.005315682; by_table={'raw_events': 126003, 'trades': 24976, 'agg_trades': 6373, 'book_ticker': 82545, 'candles': 24, 'depth_updates': 4315, 'ticker_24h': 657, 'mark_price': 716}; projections={'7d': {'rows': 825362496, 'bytes': 319831894259}, '30d': {'rows': 3537267843, 'bytes': 1370708118253}, '90d': {'rows': 10611803531, 'bytes': 4112124354760}, '1y': {'rows': 43036758766, 'bytes': 16676948772084}} (smoke/list rates do not equal full-universe rates)
 
 ### provenance
 
-- ✅ **PASS** — REST backfill source_type: source_type counts={'internal': 2, 'rest_backfill': 1, 'rest_poll': 4963, 'unknown': 50, 'websocket': 127897}; gap_fill_jobs=2; values=websocket|rest_poll|rest_backfill — crawler fills agg_trades/klines holes
+- ✅ **PASS** — REST backfill source_type: source_type counts={'internal': 32, 'rest_poll': 4785, 'websocket': 121186}; gap_fill_jobs=0; values=websocket|rest_poll|rest_backfill — crawler fills agg_trades/klines holes
 
 ### coverage_history
 

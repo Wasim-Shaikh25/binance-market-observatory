@@ -5,6 +5,21 @@ making any change — see `AGENTS.md` rule 5.
 
 Format: reverse chronological, one entry per change, dated.
 
+## 2026-08-27 (15)
+
+- **ClickHouse is the durable hot store**; SQLite is optional/ephemeral:
+  - `ClickHouseSink` now mirrors **all** normalizer kinds (not only trades/agg/book)
+  - `database.persist: false` deletes the SQLite file after graceful stop when CH
+    and/or the zstd archive is enabled
+  - Smoke config: CH + archive on, `persist: false`; `--duration-seconds` for timed runs
+- Live smoke `smoke_chprim_*` (~3 min): validation checklist **PASS** on products /
+  intended feeds (Options WS still PARTIAL / announcements NOT_PUBLICLY_AVAILABLE)
+- Size: SQLite ~95 MiB → ClickHouse **~8.1 MiB** (~12×); archive ~2.8 MiB; local
+  `data/*.db` cleaned up after the checklist run
+- Requirement:
+  `docs/requirements/2026-08-27-clickhouse-primary-drop-sqlite/`
+- 73 tests passing
+
 ## 2026-08-27 (14)
 
 - **Dual-write sinks** (SQLite kept for comparison):

@@ -14,7 +14,10 @@ database:
   # docs/requirements/2026-08-27-per-run-db-and-background-run-scripts/.
   # Remove the placeholder (e.g. just "data/market.db") to always append to
   # one fixed file across runs instead.
+  # persist: false deletes the SQLite file after stop when CH and/or archive
+  # sinks are enabled (SQLite stays for in-run ops / validation only).
   path: data/market_{run_id}.db
+  persist: false
 
 products:
   spot:
@@ -95,17 +98,18 @@ rate_limits:
   ws_connections_per_5min: 150
   max_streams_per_connection: 100
 
-# Dual sinks (SQLite stays primary until comparison is done).
+# Dual sinks. ClickHouse + archive are the durable path; enable both for
+# production-style runs. SQLite remains for in-run ops unless persist:false.
 # Start ClickHouse: docker start bmo-clickhouse  (default/bench @ :8123)
 sinks:
   clickhouse:
-    enabled: false
+    enabled: true
     url: http://127.0.0.1:8123
     user: default
     password: bench
     database: bmo_{run_id}
     batch_size: 500
   raw_archive:
-    enabled: false
+    enabled: true
     path: data/archive_{run_id}/raw.ndjson.zst
     rotate: none  # none = one file per run; hour = rotate each UTC hour
