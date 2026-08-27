@@ -86,3 +86,23 @@ this checklist and **fix what you find yourself** — don't just report it and s
 
 Fix every issue you find, then update `CHANGELOG.md`, `STATUS.md`, and this folder's
 `TRACKER.md` in the same commit. Only then check the task off.
+
+## 8. Recommended tooling: Ponytail
+
+[Ponytail](https://github.com/DietrichGebert/ponytail) is a Claude Code plugin that
+enforces the same discipline rule 7 already asks for: before writing new code, check
+whether it needs to exist, whether it's already in the codebase, whether stdlib/native
+platform features cover it, and only then write the minimal code required. It directly
+reinforces this project's "no premature abstraction, no speculative code" stance and is
+recommended for whoever implements the connectors in `src/`.
+
+It is not installed automatically — enable it once per Claude Code session/environment
+with:
+
+```
+/plugin marketplace add DietrichGebert/ponytail
+/plugin install ponytail@ponytail
+```
+
+It is a session-level tool, not a repo dependency — it has no entry in `requirements.txt`
+or equivalent and does not affect what ships in `src/`.

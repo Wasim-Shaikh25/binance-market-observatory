@@ -5,6 +5,14 @@ making any change — see `AGENTS.md` rule 5.
 
 Format: reverse chronological, one entry per change, dated.
 
+## 2026-08-27 (2)
+
+- Added `AGENTS.md` rule 8: recommends the [Ponytail](https://github.com/DietrichGebert/ponytail)
+  Claude Code plugin (enforces "check existing/stdlib/native before writing new code")
+  for whoever implements the collector. It's a session-level plugin enabled via
+  `/plugin marketplace add` + `/plugin install`, not a repo dependency — no code
+  changed here.
+
 ## 2026-08-27
 
 - Established the documentation/governance scaffold for the project:
